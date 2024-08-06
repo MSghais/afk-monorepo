@@ -28,6 +28,7 @@ import { retrievePublicKey } from '../utils/storage';
 import Sidebar from '../components/Layout/sidebar';
 import { Defi } from '../screens/Defi';
 import { Games } from '../screens/Games';
+import { LightningView } from '../screens/Lightning';
 
 const RootStack = createNativeStackNavigator<RootStackParams>();
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
@@ -168,6 +169,7 @@ const MainNavigator: React.FC = () => {
       <MainStack.Screen name="CreateForm" component={CreateForm} />
       <MainStack.Screen name="Defi" component={Defi} />
       <MainStack.Screen name="Games" component={Games} />
+      <MainStack.Screen name="Lightning" component={LightningView} />
     </MainStack.Navigator>
   );
 };

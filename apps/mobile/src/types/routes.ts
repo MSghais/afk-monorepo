@@ -30,6 +30,7 @@ export type MainStackParams = {
   CreateForm: undefined;
   Defi: undefined;
   Games:undefined,
+  Lightning:undefined
 };
 
 export type HomeBottomStackParams = {
@@ -161,5 +162,10 @@ export type DefiScreenProps = CompositeScreenProps<
 
 export type GameSreenProps = CompositeScreenProps<
   NativeStackScreenProps<MainStackParams, 'Games'>,
+  NativeStackScreenProps<RootStackParams>
+>;
+
+export type LightningNetworkScreenProps = CompositeScreenProps<
+  NativeStackScreenProps<MainStackParams, 'Lightning'>,
   NativeStackScreenProps<RootStackParams>
 >;
