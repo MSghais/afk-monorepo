@@ -7,6 +7,8 @@ import { useStyles } from '../../hooks';
 import {  GameSreenProps } from '../../types';
 import { SelectedTab, TABS_FORM_CREATE } from '../../types/tab';
 import stylesheet from './styles';
+import BarChart from '../../components/Game/bar/BarChart';
+import PixelHomepage from '../../components/Game/pixel/PixelHomepage';
 
 export const Games: React.FC<GameSreenProps> = ({ navigation }) => {
   const styles = useStyles(stylesheet);
@@ -36,6 +38,10 @@ export const Games: React.FC<GameSreenProps> = ({ navigation }) => {
         ></TabSelector> */}
         <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.content}>
           <Text>Coming soon</Text>
+
+          <BarChart></BarChart>
+
+          <PixelHomepage></PixelHomepage>
      
         </SafeAreaView>
       </KeyboardAvoidingView>

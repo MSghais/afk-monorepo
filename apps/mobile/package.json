@@ -42,6 +42,7 @@
     "axios": "^1.7.2",
     "buffer": "^6.0.3",
     "crypto-es": "^2.1.0",
+    "d3": "^7.9.0",
     "events": "^3.3.0",
     "expo": "~51.0.17",
     "expo-application": "^5.9.1",
@@ -77,6 +78,8 @@
     "react-native-svg": "15.2.0",
     "react-native-tab-view": "^3.5.2",
     "react-native-web": "~0.19.6",
+    "react-transition-group": "^4.4.5",
+    "react-use-websocket": "^4.8.1",
     "starknet": "6.9.0",
     "starknetkit": "^1.1.9",
     "zustand": "^4.5.2"
@@ -84,6 +87,7 @@
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@babel/plugin-proposal-export-namespace-from": "^7.18.9",
+    "@types/d3": "^7.4.3",
     "@types/pbkdf2": "^3.1.2",
     "@types/react": "~18.2.79",
     "@uniswap/eslint-config": "^1.2.0",
