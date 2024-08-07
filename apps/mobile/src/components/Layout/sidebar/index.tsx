@@ -1,17 +1,21 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import stylesheet from './styles';
 import { useStyles, useTheme } from '../../../hooks';
 import { Icon } from '../../Icon';
 import { useNavigation } from '@react-navigation/native';
 import { MainStackNavigationProps } from '../../../types';
 import { useAuth } from '../../../store/auth';
+import { DrawerContentComponentProps } from '@react-navigation/drawer';
 
-const Sidebar = () => {
+interface ISidebar {
+    props?:DrawerContentComponentProps
+}
+const Sidebar = ({props}:ISidebar) => {
     const styles = useStyles(stylesheet);
+    const theme = useTheme()
 
     const publicKey = useAuth((state) => state.publicKey);
-
 
     const navigation = useNavigation<MainStackNavigationProps>()
     const handleNavigateProfile = () => {
@@ -19,8 +23,11 @@ const Sidebar = () => {
     };
 
 
-    const theme = useTheme()
 
+
+
+    const dimensions = useWindowDimensions();
+    const isDesktop = dimensions.width >= 1024;
 
     // const handleNavigateHome = () => {
     //     navigation.navigate("Home");
@@ -41,30 +48,16 @@ const Sidebar = () => {
 
 
     return (
-        <View style={styles.sidebar}>
+        <View style={[styles.sidebar, 
+            // {width:is}
+            ]
+    
+    }
+        {...props}
+        
+        >
             <Text style={styles.sidebarText}>AFK</Text>
             <Text style={[styles.title]}>Features coming soon</Text>
-            {/* 
-            <Text style={[styles.item]}>
-                Launchpad
-            </Text>
-            <Text style={[styles.item,]}>
-                Notifications
-            </Text> */}
-            {/* <Pressable style={[styles.item]}
-            // onPress={handleNavigateToPostDetails}
-            >
-            </Pressable> */}
-            {/* <Pressable
-                // onPress={handleNavigateHome}
-                style={styles.item}>
-                <Text
-                    style={styles.textItem}
-                >
-                    Home
-                </Text>
-
-            </Pressable> */}
 
             <Pressable
                 onPress={handleHomeScreen}
@@ -119,12 +112,8 @@ const Sidebar = () => {
                 />
                 <Text style={styles.textItem}>
                     Profile
-
                 </Text>
-
             </Pressable>
-
-
 
         </View>
     );

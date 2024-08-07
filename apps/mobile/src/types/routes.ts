@@ -5,6 +5,7 @@ import {NativeStackNavigationProp, NativeStackScreenProps} from '@react-navigati
 export type RootStackParams = {
   MainStack: NavigatorScreenParams<MainStackParams>;
   AuthStack: NavigatorScreenParams<AuthStackParams>;
+  DesktopStack: NavigatorScreenParams<MainStackParams>;
 };
 
 export type AuthStackParams = {

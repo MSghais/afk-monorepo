@@ -1,8 +1,8 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useEffect, useState } from 'react';
-import { Dimensions, Platform, StyleSheet, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Dimensions, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Icon } from '../components';
 import { useStyles, useTheme } from '../hooks';
 import { CreateAccount } from '../screens/Auth/CreateAccount';
@@ -27,11 +27,16 @@ import { retrievePublicKey } from '../utils/storage';
 import Sidebar from '../components/Layout/sidebar';
 import { Defi } from '../screens/Defi';
 import { Games } from '../screens/Games';
-
+import { createDrawerNavigator, useDrawerStatus } from '@react-navigation/drawer';
+import { CustomHeader } from '../components/Layout/Navbar';
+const Drawer = createDrawerNavigator<MainStackParams>();
 const RootStack = createNativeStackNavigator<RootStackParams>();
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
 const MainStack = createNativeStackNavigator<MainStackParams>();
 const HomeBottomTabsStack = createBottomTabNavigator<HomeBottomStackParams>();
+const isWeb = Platform.OS === 'web';
+const windowWidth = Dimensions.get('window').width;
+const shouldShowSidebar = isWeb && windowWidth >= 1024;
 
 const HomeBottomTabNavigator: React.FC = () => {
   const styles = useStyles(stylesheet);
@@ -141,7 +146,9 @@ const AuthNavigator: React.FC = () => {
   if (publicKey === undefined) return null;
 
   return (
-    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+    <AuthStack.Navigator screenOptions={{ headerShown: false }}
+
+    >
       {publicKey && <AuthStack.Screen name="Login" component={Login} />}
       <AuthStack.Screen name="CreateAccount" component={CreateAccount} />
       <AuthStack.Screen name="SaveKeys" component={SaveKeys} />
@@ -150,26 +157,82 @@ const AuthNavigator: React.FC = () => {
   );
 };
 
-const MainNavigator: React.FC = () => {
-  return (
-    <MainStack.Navigator screenOptions={{ headerShown: false }}
+const DesktopNavigator: React.FC = () => {
 
+  const theme = useTheme()
+  return (
+    <>
+      <View
+      //  style={{ flex: 1, flexDirection: "row" }}
+      >
+        <Sidebar></Sidebar>
+        <MainStack.Navigator
+        // screenOptions={{
+        //   header: () => <CustomHeader 
+        //   // navigation={navigation} 
+        //   title="AFK" />,
+        //   headerStyle: {
+        //     backgroundColor: theme.theme.colors.background
+        //   },
+        //   headerTintColor: theme.theme.colors.text,
+        // }}
+
+        >
+          <MainStack.Screen name="Home" component={HomeBottomTabNavigator} />
+          <MainStack.Screen name="Profile" component={Profile} />
+          <MainStack.Screen name="EditProfile" component={EditProfile} />
+          <MainStack.Screen name="CreatePost" component={CreatePost} />
+          <MainStack.Screen name="PostDetail" component={PostDetail} />
+          <MainStack.Screen name="ChannelDetail" component={ChannelDetail} />
+          <MainStack.Screen name="Search" component={Search} />
+          <MainStack.Screen name="CreateChannel" component={CreateChannel} />
+          <MainStack.Screen name="ChannelsFeed" component={ChannelsFeed} />
+          <MainStack.Screen name="CreateForm" component={CreateForm} />
+          <MainStack.Screen name="Defi" component={Defi} />
+          <MainStack.Screen name="Games" component={Games} />
+        </MainStack.Navigator>
+      </View>
+    </>)
+
+}
+const MainNavigator: React.FC = () => {
+  // const styles = useStyles(stylesheet)
+  const theme = useTheme()
+  const dimensions = useWindowDimensions();
+  return (
+    <Drawer.Navigator
+      screenOptions={({ navigation }) => ({
+        header: () => <CustomHeader navigation={navigation} title="AFK" />,
+        headerStyle: {
+          backgroundColor: theme.theme.colors.background
+        },
+        headerTintColor: theme.theme.colors.text,
+        // drawerType: 'slide',
+        // drawerType: "permanent",
+        overlayColor: 'transparent',  // Make sure overlay settings are correct
+        // drawerStyle: {
+        //   width: 240, // Adjust width or other styling as necessary
+        // }
+      })}
+      drawerContent={(props) => <Sidebar
+        props={props}
+      ></Sidebar>}
     >
-      <MainStack.Screen name="Home" component={HomeBottomTabNavigator} />
-      <MainStack.Screen name="Profile" component={Profile} />
-      <MainStack.Screen name="EditProfile" component={EditProfile} />
-      <MainStack.Screen name="CreatePost" component={CreatePost} />
-      <MainStack.Screen name="PostDetail" component={PostDetail} />
-      <MainStack.Screen name="ChannelDetail" component={ChannelDetail} />
-      <MainStack.Screen name="Search" component={Search} />
-      <MainStack.Screen name="CreateChannel" component={CreateChannel} />
-      <MainStack.Screen name="ChannelsFeed" component={ChannelsFeed} />
-      <MainStack.Screen name="CreateForm" component={CreateForm} />
-      <MainStack.Screen name="Defi" component={Defi} />
-      <MainStack.Screen name="Games" component={Games} />
-    </MainStack.Navigator>
-  );
-};
+      <Drawer.Screen name="Home" component={HomeBottomTabNavigator} />
+      <Drawer.Screen name="Profile" component={Profile} />
+      <Drawer.Screen name="EditProfile" component={EditProfile} />
+      <Drawer.Screen name="CreatePost" component={CreatePost} />
+      <Drawer.Screen name="PostDetail" component={PostDetail} />
+      <Drawer.Screen name="ChannelDetail" component={ChannelDetail} />
+      <Drawer.Screen name="Search" component={Search} />
+      <Drawer.Screen name="CreateChannel" component={CreateChannel} />
+      <Drawer.Screen name="ChannelsFeed" component={ChannelsFeed} />
+      <Drawer.Screen name="CreateForm" component={CreateForm} />
+      <Drawer.Screen name="Defi" component={Defi} />
+      <Drawer.Screen name="Games" component={Games} />
+    </Drawer.Navigator >
+  )
+}
 
 const linking = {
   prefixes: [
@@ -202,10 +265,21 @@ const linking = {
 const RootNavigator: React.FC = () => {
   const { publicKey } = useAuth();
 
+  const styles = useStyles(stylesheet)
+  const dimensions = useWindowDimensions();
+  const isDesktop = dimensions.width >= 1024;
+
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
       {publicKey ? (
-        <RootStack.Screen name="MainStack" component={MainNavigator} />
+        <>
+          {isDesktop ?
+            // <RootStack.Screen name="DesktopStack" component={DesktopNavigator} />
+            <RootStack.Screen name="MainStack" component={MainNavigator} />
+            :
+            <RootStack.Screen name="MainStack" component={MainNavigator} />
+          }
+        </>
       ) : (
         <RootStack.Screen name="AuthStack" component={AuthNavigator} />
       )}
@@ -213,16 +287,13 @@ const RootNavigator: React.FC = () => {
   );
 };
 
+
 export const Router: React.FC = () => {
-  const isWeb = Platform.OS === 'web';
-  const windowWidth = Dimensions.get('window').width;
-  const shouldShowSidebar = isWeb && windowWidth >= 1024;
+  const dimensions = useWindowDimensions();
+  const isDesktop = dimensions.width >= 768;
   return (
     <NavigationContainer
-    // linking={linking}
     >
-      {shouldShowSidebar && <Sidebar></Sidebar>}
-      
       <RootNavigator />
     </NavigationContainer>
   );
@@ -234,7 +305,9 @@ const stylesheet = ThemedStyleSheet((theme) => ({
   },
   container: {
     flex: 1,
-    flexDirection: 'row'
+    flexDirection: 'row',
+    // backgroundColor: theme.colors.background,
+    // width: '100%',
   },
   content: {
     flex: 1,
@@ -254,3 +327,4 @@ const stylesheet = ThemedStyleSheet((theme) => ({
     backgroundColor: theme.colors.surface,
   },
 }));
+
