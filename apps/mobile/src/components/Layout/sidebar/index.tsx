@@ -39,10 +39,6 @@ const Sidebar = () => {
         navigation.navigate("Home");
     };
 
-    const handleLightningScreen = () => {
-        navigation.navigate("Lightning");
-    };
-
 
 
     return (
@@ -70,20 +66,6 @@ const Sidebar = () => {
                 </Text>
 
             </Pressable> */}
-  <Pressable
-                onPress={handleLightningScreen}
-                style={styles.item}>
-                {/* <Icon
-                    name="HomeIcon"
-                    size={24}
-                    style={{ backgroundColor: theme.theme.colors.background }}
-                /> */}
-                <Text style={styles.textItem}>
-                    Home
-                </Text>
-
-            </Pressable>
-
 
             <Pressable
                 onPress={handleHomeScreen}

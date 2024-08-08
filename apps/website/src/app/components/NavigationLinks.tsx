@@ -7,6 +7,9 @@ export function NavigationLinks() {
       <li>
         <Link href="/features">Features </Link>
       </li>
+      {/* <li>
+        <Link href="/lightning">Lightning </Link>
+      </li> */}
       {/* <li>Ecosystem</li> */}
       {/* <li>Developers</li> */}
     </ul>

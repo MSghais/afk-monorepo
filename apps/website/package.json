@@ -7,12 +7,13 @@
     "start": "next start",
     "build": "next build",
     "lint": "next lint",
-    "lint:fix":"next lint --fix",
-    "prettier:fix":"pnpm prettier --write 'src/**/*.tsx'",
-    "prettier:fix:ts":"pnpm prettier --write 'src/**/*.ts'"
+    "lint:fix": "next lint --fix",
+    "prettier:fix": "pnpm prettier --write 'src/**/*.tsx'",
+    "prettier:fix:ts": "pnpm prettier --write 'src/**/*.ts'"
   },
   "dependencies": {
     "@avnu/avnu-sdk": "^2.0.0",
+    "@getalby/bitcoin-connect-react": "^3.5.3",
     "@pinata/sdk": "^2.1.0",
     "ethers": "^6.13.1",
     "framer-motion": "^11.2.4",
