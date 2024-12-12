@@ -157,7 +157,9 @@ const AccountStarknet = (props) => {
       setConnectorData(connectorData);
       setConnected(true);
       setWallet(wallet);
-      // setQueryAddress(wallet?.address)
+      if(wallet?.selectedAddress) {
+      setQueryAddress(wallet?.selectedAddress)
+      }
       // let new_account = await connector.account(window?.starknet);
       // setAccount(new_account);
       setIsSessionable(canSession(wallet));

@@ -20,7 +20,7 @@ const PixelSelector = (props) => {
   const [placementMode, setPlacementMode] = useState(false);
   const [ended, setEnded] = useState(false);
   useEffect(() => {
-    if (props.queryAddress === '0' || !account?.address) {
+    if (props.queryAddress === '0' && !account?.address) {
       setPlacementTimer('Login to Play');
       return;
     }
