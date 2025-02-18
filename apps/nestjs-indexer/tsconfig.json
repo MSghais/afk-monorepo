@@ -17,8 +17,7 @@
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
-    "types": ["node"],
-    "declarationDir": "dist",
-    "noEmit": false,
+    "esModuleInterop": true,
+    "types": ["node"]
   }
 }
