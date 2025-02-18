@@ -21,10 +21,10 @@ export class IndexerService {
   constructor(private readonly prismaService: PrismaService) {
     this.client = new StreamClient({
       url: env.indexer.dnaClientUrl,
-      clientOptions: {
-        'grpc.max_receive_message_length':
-          constants.apibara.MAX_RECEIVE_MESSAGE_LENGTH,
-      },
+      // clientOptions: {
+      //   'grpc.max_receive_message_length':
+      //     constants.apibara.MAX_RECEIVE_MESSAGE_LENGTH,
+      // },
       token: env.indexer.dnaToken,
     });
   }
