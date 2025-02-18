@@ -1,4 +1,4 @@
-import { FieldElement, v1alpha2 as starknet } from '@apibara/starknet';
+import { FieldElement, Transaction, BlockHeader, Event } from '@apibara/starknet';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { formatUnits } from 'viem';
 import constants from 'src/common/constants';
@@ -32,12 +32,12 @@ export class TokenLaunchIndexer {
   }
 
   private async handleEvents(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     this.logger.log('Received event TokenLaunch');
-    const eventKey = validateAndParseAddress(FieldElement.toHex(event.keys[0]));
+    const eventKey = validateAndParseAddress(event.keys[0].toString());
 
     switch (eventKey) {
       case validateAndParseAddress(hash.getSelectorFromName('CreateLaunch')):
@@ -50,9 +50,9 @@ export class TokenLaunchIndexer {
   }
 
   private async handleTokenLaunchEvent(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     const {
       blockNumber,
@@ -61,27 +61,27 @@ export class TokenLaunchIndexer {
     } = header;
 
     const blockHash = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(blockHashFelt).toString(16)}`,
+      `0x${blockHashFelt.toString()}`,
     ) as ContractAddress;
 
-    const transactionHashFelt = transaction.meta.hash;
+    const transactionHashFelt = transaction.meta?.transactionHash;
     const transactionHash = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(transactionHashFelt).toString(16)}`,
+      `0x${transactionHashFelt.toString()}`,
     ) as ContractAddress;
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [_, callerFelt, tokenAddressFelt, quoteTokenAddressFelt] = event.keys;
 
     const ownerAddress = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(callerFelt).toString(16)}`,
+      `0x${callerFelt.toString()}`,
     ) as ContractAddress;
 
     const tokenAddress = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(tokenAddressFelt).toString(16)}`,
+      `0x${tokenAddressFelt.toString()}`,
     ) as ContractAddress;
 
     const quoteTokenAddress = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(quoteTokenAddressFelt).toString(16)}`,
+      `0x${quoteTokenAddressFelt.toString()}`,
     ) as ContractAddress;
 
     const [
@@ -99,20 +99,20 @@ export class TokenLaunchIndexer {
     ] = event.data;
 
     const amountRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(amountLow),
-      high: FieldElement.toBigInt(amountHigh),
+      low: amountLow.toString(),
+      high: amountHigh.toString(),
     });
     const amount = formatUnits(amountRaw, constants.DECIMALS).toString();
 
     const priceRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(priceLow),
-      high: FieldElement.toBigInt(priceHigh),
+      low: priceLow.toString(),
+      high: priceHigh.toString(),
     });
     const price = formatUnits(priceRaw, constants.DECIMALS);
 
     const totalSupplyRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(totalSupplyLow),
-      high: FieldElement.toBigInt(totalSupplyHigh),
+      low: totalSupplyLow.toString(),
+      high: totalSupplyHigh.toString(),
     });
     const totalSupply = formatUnits(
       totalSupplyRaw,
@@ -120,15 +120,15 @@ export class TokenLaunchIndexer {
     ).toString();
 
     const slopeRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(slopeLow),
-      high: FieldElement.toBigInt(slopeHigh),
+      low: slopeLow.toString(),
+      high: slopeHigh.toString(),
     });
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const slope = formatUnits(slopeRaw, constants.DECIMALS).toString();
 
     const thresholdLiquidityRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(thresholdLiquidityLow),
-      high: FieldElement.toBigInt(thresholdLiquidityHigh),
+      low: thresholdLiquidityLow.toString(),
+      high: thresholdLiquidityHigh.toString(),
     });
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const thresholdLiquidity = formatUnits(
@@ -141,7 +141,7 @@ export class TokenLaunchIndexer {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const bondingType = bondingTypeFelt
       ? shortString.decodeShortString(
-          FieldElement.toBigInt(bondingTypeFelt).toString(),
+          bondingTypeFelt.toString(),
         )
       : '';
 
@@ -152,7 +152,7 @@ export class TokenLaunchIndexer {
       network: 'starknet-sepolia',
       blockNumber: Number(blockNumber),
       blockHash,
-      blockTimestamp: new Date(Number(blockTimestamp.seconds) * 1000),
+      blockTimestamp: new Date(Number(blockTimestamp?.getTime()) * 1000),
       memecoinAddress: tokenAddress,
       quoteToken: quoteTokenAddress,
       amount: Number(amount),

@@ -1,8 +1,8 @@
-import { FieldElement, v1alpha2 as starknet } from '@apibara/starknet';
+import { FieldElement,  BlockHeader, Event, Transaction } from '@apibara/starknet';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { formatUnits } from 'viem';
 import constants from 'src/common/constants';
-import { cairo, hash, shortString, uint256, validateAndParseAddress } from 'starknet';
+import { cairo, hash, shortString, stark, uint256, validateAndParseAddress } from 'starknet';
 import { BuyTokenService } from 'src/services/buy-token/buy-token.service';
 import { IndexerService } from './indexer.service';
 import { ContractAddress } from 'src/common/types';
@@ -52,12 +52,12 @@ export class MetadataLaunchIndexer {
 
 
   private async handleEvents(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     this.logger.log('Received event');
-    const eventKey = validateAndParseAddress(FieldElement.toHex(event.keys[0]));
+    const eventKey = validateAndParseAddress(event.keys[0].toString());
 
     switch (eventKey) {
       case validateAndParseAddress(hash.getSelectorFromName('MetadataCoinAdded')):
@@ -70,9 +70,9 @@ export class MetadataLaunchIndexer {
   }
 
   private async handeMetadataEvent(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     const {
       blockNumber,
@@ -82,20 +82,20 @@ export class MetadataLaunchIndexer {
     console.log("handleMetadataEvent", event);
 
     const blockHash = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(blockHashFelt).toString(16)}`,
+      `0x${blockHashFelt.toString()}`,
     ) as ContractAddress;
 
-    const transactionHashFelt = transaction.meta.hash;
+    const transactionHashFelt = transaction.meta?.transactionHash;
     const transactionHash = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(transactionHashFelt).toString(16)}`,
+      `0x${transactionHashFelt.toString()}`,
     ) as ContractAddress;
 
-    const transferId = `${transactionHash}_${event.index}`;
+    const transferId = `${transactionHash}_${event?.eventIndex}`;
 
     const [, tokenAddressFelt] = event.keys;
 
     const tokenAddress = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(tokenAddressFelt).toString(16)}`,
+      `0x${tokenAddressFelt.toString()}`,
     ) as ContractAddress;
 
     const [
@@ -111,7 +111,7 @@ export class MetadataLaunchIndexer {
     while (i < event.data.length) {
       const part = event.data[i];
       const decodedPart = shortString.decodeShortString(
-        FieldElement.toBigInt(part).toString(),
+        part.toString(),
       );
 
       if (this.isNumeric(decodedPart)) {
@@ -133,14 +133,14 @@ export class MetadataLaunchIndexer {
     let nostrEventId = cairo.felt(0);
 
     try {
-      nostrEventId = cairo.felt(FieldElement.toBigInt(nostrEventIdLow)) + cairo.felt(FieldElement.toBigInt(nostrEventIdHigh));
+      nostrEventId = cairo.felt((nostrEventIdLow)) + cairo.felt(nostrEventIdHigh);
       
     } catch (error) {
       
     }
     console.log("nostrEventId", nostrEventId);
     const timestamp = new Date(
-      Number(FieldElement.toBigInt(timestampFelt)) * 1000,
+      Number(uint256.uint256ToBN(cairo.uint256(timestampFelt))) * 1000,
     );
 
     const data = {
@@ -149,7 +149,7 @@ export class MetadataLaunchIndexer {
       transactionHash,
       blockNumber: Number(blockNumber),
       blockHash,
-      blockTimestamp: new Date(Number(blockTimestamp.seconds) * 1000),
+      blockTimestamp: new Date(Number(blockTimestamp?.getTime()) * 1000),
       memecoinAddress: tokenAddress,
       nostrEventId,
       url: url,

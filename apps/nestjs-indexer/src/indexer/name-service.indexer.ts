@@ -1,4 +1,4 @@
-import { FieldElement, v1alpha2 as starknet } from '@apibara/starknet';
+import { BlockHeader, FieldElement, Transaction, Event } from '@apibara/starknet';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { formatUnits } from 'viem';
 import constants from 'src/common/constants';
@@ -31,12 +31,12 @@ export class NameServiceIndexer {
   }
 
   private async handleEvents(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     this.logger.log('Received event');
-    const eventKey = validateAndParseAddress(FieldElement.toHex(event.keys[0]));
+    const eventKey = validateAndParseAddress(event.keys[0].toString());
 
     switch (eventKey) {
       case validateAndParseAddress(hash.getSelectorFromName('UsernameClaimed')):
@@ -49,9 +49,9 @@ export class NameServiceIndexer {
   }
 
   private async handleUsernameClaimedEvent(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     const {
       blockNumber,
@@ -60,19 +60,19 @@ export class NameServiceIndexer {
     } = header;
 
     const blockHash = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(blockHashFelt).toString(16)}`,
+      `0x${blockHashFelt.toString()}`,
     ) as ContractAddress;
 
-    const transactionHashFelt = transaction.meta.hash;
+    const transactionHashFelt = transaction.meta?.transactionHash ;
     const transactionHash = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(transactionHashFelt).toString(16)}`,
+      `0x${transactionHashFelt.toString()}`,
     ) as ContractAddress;
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [_, addressFelt] = event.keys;
 
     const address = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(addressFelt).toString(16)}`,
+      `0x${addressFelt.toString()}`,
     ) as ContractAddress;
 
     const [usernameFelt, expiryFelt, paidLow, paidHigh, quoteTokenFelt] =
@@ -80,20 +80,20 @@ export class NameServiceIndexer {
 
     const username = usernameFelt
       ? shortString.decodeShortString(
-          FieldElement.toBigInt(usernameFelt).toString(),
+          usernameFelt.toString(),
         )
       : '';
 
-    const expiry = new Date(Number(FieldElement.toBigInt(expiryFelt)) * 1000);
+    const expiry = new Date(Number(expiryFelt.toString()) * 1000);
 
     const paidRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(paidLow),
-      high: FieldElement.toBigInt(paidHigh),
+      low: paidLow.toString(),
+      high: paidHigh.toString(),
     });
     const paid = formatUnits(paidRaw, constants.DECIMALS).toString();
 
     const quoteToken = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(quoteTokenFelt).toString(16)}`,
+      `0x${quoteTokenFelt.toString()}`,
     ) as ContractAddress;
 
     const data = {
@@ -101,7 +101,7 @@ export class NameServiceIndexer {
       network: 'starknet-sepolia',
       blockNumber: Number(blockNumber),
       blockHash,
-      blockTimestamp: new Date(Number(blockTimestamp.seconds) * 1000),
+      blockTimestamp: new Date(Number(blockTimestamp?.getTime()) * 1000),
       ownerAddress: address,
       expiry,
       name: username,

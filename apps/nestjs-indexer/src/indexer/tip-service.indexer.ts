@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { IndexerService } from './indexer.service';
 import { hash, validateAndParseAddress } from 'starknet';
 import { TipService } from '../services/tip-service/tip.service';
-import { v1alpha2 as starknet } from '@apibara/starknet/dist/proto';
+import { Transaction, BlockHeader, Event } from '@apibara/starknet';
 import { FieldElement } from '@apibara/starknet';
 import {
   feltToAddress,
@@ -38,15 +38,13 @@ export class TipServiceIndexer {
   }
 
   private async handleEvents(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     this.logger.log('Received event');
     try {
-      const eventKey = validateAndParseAddress(
-        FieldElement.toHex(event.keys[0]),
-      );
+      const eventKey = validateAndParseAddress(event.keys[0].toString());
 
       switch (eventKey) {
         case validateAndParseAddress(hash.getSelectorFromName('DepositEvent')):
@@ -74,9 +72,9 @@ export class TipServiceIndexer {
   }
 
   private async handleTipDepositEvent(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     const commonTxData = getEventTxData(header, transaction);
 
@@ -89,7 +87,7 @@ export class TipServiceIndexer {
       nostrRecipientHigh,
     ] = event.keys;
 
-    const depositId = FieldElement.toBigInt(depositIdFelt).toString();
+    const depositId = depositIdFelt.toString();
     const sender = feltToAddress(senderFelt);
     const nostrRecipient = uint256ToHex(nostrRecipientLow, nostrRecipientHigh);
 
@@ -110,9 +108,9 @@ export class TipServiceIndexer {
   }
 
   private async handleTipTransferEvent(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     const commonTxData = getEventTxData(header, transaction);
 
@@ -147,9 +145,9 @@ export class TipServiceIndexer {
   }
 
   private async handleTipClaimEvent(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     const commonTxData = getEventTxData(header, transaction);
 
@@ -163,7 +161,7 @@ export class TipServiceIndexer {
       starknetRecipientFelt,
     ] = event.keys;
 
-    const depositId = FieldElement.toBigInt(depositIdFelt).toString();
+    const depositId = depositIdFelt.toString();
     const sender = feltToAddress(senderFelt);
     const nostrRecipient = uint256ToHex(nostrRecipientLow, nostrRecipientHigh);
     const starknetRecipient = feltToAddress(starknetRecipientFelt);
@@ -198,9 +196,9 @@ export class TipServiceIndexer {
   }
 
   private async handleTipCancelEvent(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     const commonTxData = getEventTxData(header, transaction);
 
@@ -213,7 +211,7 @@ export class TipServiceIndexer {
       nostrRecipientHigh,
     ] = event.keys;
 
-    const depositId = FieldElement.toBigInt(depositIdFelt).toString();
+    const depositId = depositIdFelt.toString();
     const sender = feltToAddress(senderFelt);
     const nostrRecipient = uint256ToHex(nostrRecipientLow, nostrRecipientHigh);
 

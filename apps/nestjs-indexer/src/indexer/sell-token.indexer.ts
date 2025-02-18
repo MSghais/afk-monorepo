@@ -1,4 +1,4 @@
-import { FieldElement, v1alpha2 as starknet } from '@apibara/starknet';
+import { FieldElement, Transaction, Event, BlockHeader } from '@apibara/starknet';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { formatUnits } from 'viem';
 import constants from 'src/common/constants';
@@ -31,12 +31,12 @@ export class SellTokenIndexer {
   }
 
   private async handleEvents(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction:Transaction,
   ) {
     this.logger.log('Received event');
-    const eventKey = validateAndParseAddress(FieldElement.toHex(event.keys[0]));
+    const eventKey = validateAndParseAddress(event.keys[0].toString());
 
     switch (eventKey) {
       case validateAndParseAddress(hash.getSelectorFromName('SellToken')):
@@ -49,9 +49,9 @@ export class SellTokenIndexer {
   }
 
   private async handleSellTokenEvent(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     const {
       blockNumber,
@@ -60,25 +60,25 @@ export class SellTokenIndexer {
     } = header;
 
     const blockHash = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(blockHashFelt).toString(16)}`,
+      `0x${blockHashFelt.toString()}`,
     ) as ContractAddress;
 
-    const transactionHashFelt = transaction.meta.hash;
+    const transactionHashFelt = transaction.meta?.transactionHash;
     const transactionHash = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(transactionHashFelt).toString(16)}`,
+      `0x${transactionHashFelt.toString()}`,
     ) as ContractAddress;
 
-    const transferId = `${transactionHash}_${event.index}`;
+    const transferId = `${transactionHash}_${event.eventIndex}`;
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [_, callerFelt, tokenAddressFelt] = event.keys;
 
     const ownerAddress = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(callerFelt).toString(16)}`,
+      `0x${callerFelt.toString()}`,
     ) as ContractAddress;
 
     const tokenAddress = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(tokenAddressFelt).toString(16)}`,
+      `0x${tokenAddressFelt.toString()}`,
     ) as ContractAddress;
 
     const [
@@ -98,20 +98,20 @@ export class SellTokenIndexer {
     ] = event.data;
 
     const amountRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(amountLow),
-      high: FieldElement.toBigInt(amountHigh),
+      low: amountLow.toString(),
+      high: amountHigh.toString(),
     });
     const amount = formatUnits(amountRaw, constants.DECIMALS).toString();
 
     const priceRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(priceLow),
-      high: FieldElement.toBigInt(priceHigh),
+      low: priceLow.toString(),
+      high: priceHigh.toString(),
     });
     const price = formatUnits(priceRaw, constants.DECIMALS);
 
     const protocolFeeRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(protocolFeeLow),
-      high: FieldElement.toBigInt(protocolFeeHigh),
+      low: protocolFeeLow.toString(),
+      high: protocolFeeHigh.toString(),
     });
     const protocolFee = formatUnits(
       protocolFeeRaw,
@@ -119,14 +119,14 @@ export class SellTokenIndexer {
     ).toString();
 
     const lastPriceRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(lastPriceLow),
-      high: FieldElement.toBigInt(lastPriceHigh),
+      low: lastPriceLow.toString(),
+      high: lastPriceHigh.toString(),
     });
     const lastPrice = formatUnits(lastPriceRaw, constants.DECIMALS).toString();
 
     const quoteAmountRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(amountLow),
-      high: FieldElement.toBigInt(amountHigh),
+      low: amountLow.toString(),
+      high: amountHigh.toString(),
     });
     const quoteAmount = formatUnits(
       quoteAmountRaw,
@@ -140,8 +140,8 @@ export class SellTokenIndexer {
     // New version upgrade with coin amount sell
     if (coinAmountLow && coinAmountHigh) {
       coinAmountRaw = uint256.uint256ToBN({
-        low: FieldElement.toBigInt(coinAmountLow),
-        high: FieldElement.toBigInt(coinAmountHigh),
+        low: coinAmountLow.toString(),
+        high: coinAmountHigh.toString(),
       });
       coinAmount = formatUnits(
         coinAmountRaw ?? quoteAmountRaw,
@@ -150,7 +150,7 @@ export class SellTokenIndexer {
     }
 
     const timestamp = new Date(
-      Number(FieldElement.toBigInt(timestampFelt)) * 1000,
+      Number(timestampFelt.toString()) * 1000,
     );
 
     const data = {
@@ -159,7 +159,7 @@ export class SellTokenIndexer {
       transactionHash,
       blockNumber: Number(blockNumber),
       blockHash,
-      blockTimestamp: new Date(Number(blockTimestamp.seconds) * 1000),
+      blockTimestamp: new Date(Number(blockTimestamp?.getTime()) * 1000),
       ownerAddress,
       memecoinAddress: tokenAddress,
       amount: Number(amount),

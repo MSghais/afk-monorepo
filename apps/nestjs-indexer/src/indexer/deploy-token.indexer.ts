@@ -1,4 +1,4 @@
-import { FieldElement, v1alpha2 as starknet } from '@apibara/starknet';
+import { FieldElement, Transaction, BlockHeader, Event } from '@apibara/starknet';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { formatUnits } from 'viem';
 import constants from 'src/common/constants';
@@ -31,12 +31,12 @@ export class DeployTokenIndexer {
   }
 
   private async handleEvents(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     this.logger.log('Received event');
-    const eventKey = validateAndParseAddress(FieldElement.toHex(event.keys[0]));
+    const eventKey = validateAndParseAddress(event.keys[0].toString());
 
     switch (eventKey) {
       case validateAndParseAddress(hash.getSelectorFromName('CreateToken')):
@@ -65,9 +65,9 @@ export class DeployTokenIndexer {
   };
 
   private async handleCreateTokenEvent(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     const {
       blockNumber,
@@ -76,22 +76,18 @@ export class DeployTokenIndexer {
     } = header;
 
     const blockHash = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(blockHashFelt).toString(16)}`,
+      `0x${blockHashFelt.toString()}`,
     ) as ContractAddress;
 
-    const transactionHashFelt = transaction.meta.hash;
-    const transactionHash = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(transactionHashFelt).toString(16)}`,
-    ) as ContractAddress;
-
+    const transactionHash = transaction.meta.transactionHash;
     const [, callerFelt, tokenAddressFelt] = event.keys;
 
     const ownerAddress = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(callerFelt).toString(16)}`,
+      `0x${callerFelt.toString()}`,
     ) as ContractAddress;
 
     const tokenAddress = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(tokenAddressFelt).toString(16)}`,
+      `0x${tokenAddressFelt.toString()}`,
     ) as ContractAddress;
 
     let i = 1;
@@ -100,7 +96,7 @@ export class DeployTokenIndexer {
     while (i < event.data.length) {
       const part = event.data[i];
       const decodedPart = shortString.decodeShortString(
-        FieldElement.toBigInt(part).toString(),
+        part.toString(),
       );
 
       if (this.isNumeric(decodedPart)) {
@@ -116,7 +112,7 @@ export class DeployTokenIndexer {
 
     const part = event.data[i];
     const decodedPart = shortString.decodeShortString(
-      FieldElement.toBigInt(part).toString(),
+      part.toString(),
     );
 
     if (this.isNumeric(decodedPart)) {
@@ -128,7 +124,7 @@ export class DeployTokenIndexer {
     while (i < event.data.length - 5) {
       const part = event.data[i];
       const decodedPart = shortString.decodeShortString(
-        FieldElement.toBigInt(part).toString(),
+        part.toString(),
       );
 
       if (this.isNumeric(decodedPart)) {
@@ -145,8 +141,8 @@ export class DeployTokenIndexer {
     const initialSupplyLow = event.data[i++];
     const initialSupplyHigh = event.data[i++];
     const initialSupplyRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(initialSupplyLow),
-      high: FieldElement.toBigInt(initialSupplyHigh),
+      low: initialSupplyLow.toString(),
+      high: initialSupplyHigh.toString(),
     });
     const initialSupply = formatUnits(
       initialSupplyRaw,
@@ -158,8 +154,8 @@ export class DeployTokenIndexer {
     const totalSupplyLow = event.data[i++];
     const totalSupplyHigh = event.data[i];
     const totalSupplyRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(totalSupplyLow),
-      high: FieldElement.toBigInt(totalSupplyHigh),
+      low: totalSupplyLow.toString(),
+      high: totalSupplyHigh.toString(),
     });
     const totalSupply = formatUnits(
       totalSupplyRaw,
@@ -173,7 +169,7 @@ export class DeployTokenIndexer {
       network: 'starknet-sepolia',
       blockNumber: Number(blockNumber),
       blockHash,
-      blockTimestamp: new Date(Number(blockTimestamp.seconds) * 1000),
+      blockTimestamp: new Date(Number(blockTimestamp?.getTime()) * 1000),
       memecoinAddress: tokenAddress,
       ownerAddress,
       name,

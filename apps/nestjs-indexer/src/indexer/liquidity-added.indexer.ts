@@ -1,4 +1,4 @@
-import { FieldElement, v1alpha2 as starknet } from '@apibara/starknet';
+import { FieldElement, Transaction, BlockHeader, Event } from '@apibara/starknet';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { formatUnits } from 'viem';
 import constants from 'src/common/constants';
@@ -31,12 +31,12 @@ export class LiquidityAddedIndexer {
   }
 
   private async handleEvents(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     this.logger.log('Received event liquidity added');
-    const eventKey = validateAndParseAddress(FieldElement.toHex(event.keys[0]));
+    const eventKey = validateAndParseAddress(event.keys[0].toString());
 
     switch (eventKey) {
       case validateAndParseAddress(
@@ -51,9 +51,9 @@ export class LiquidityAddedIndexer {
   }
 
   private async handleLiquidityAddedEvent(
-    header: starknet.IBlockHeader,
-    event: starknet.IEvent,
-    transaction: starknet.ITransaction,
+    header: BlockHeader,
+    event: Event,
+    transaction: Transaction,
   ) {
     const {
       blockNumber,
@@ -62,15 +62,15 @@ export class LiquidityAddedIndexer {
     } = header;
 
     const blockHash = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(blockHashFelt).toString(16)}`,
+      `0x${blockHashFelt.toString()}`,
     ) as ContractAddress;
 
-    const transactionHashFelt = transaction.meta.hash;
+    const transactionHashFelt = transaction.meta.transactionHash;
     const transactionHash = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(transactionHashFelt).toString(16)}`,
+      `0x${transactionHashFelt.toString()}`,
     ) as ContractAddress;
 
-    const transferId = `${transactionHash}_${event.index}`;
+    const transferId = `${transactionHash}_${event.eventIndex}`;
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [_, idFeltLow, idFeltHigh, poolFelt, assetFelt, tokenAddressFelt] =
@@ -79,19 +79,19 @@ export class LiquidityAddedIndexer {
     //   `0x${FieldElement.toBigInt(idFelt).toString(16)}`,
     // ) as ContractAddress;
     const idRaw = uint256.uint256ToBN({
-      low: FieldElement.toBigInt(idFeltLow),
-      high: FieldElement.toBigInt(idFeltHigh),
+      low: idFeltLow.toString(),
+      high: idFeltHigh.toString(),
     });
     const id = formatUnits(idRaw, constants.DECIMALS).toString();
     const pool = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(poolFelt).toString(16)}`,
+      `0x${poolFelt.toString()}`,
     ) as ContractAddress;
     const assetAddress = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(assetFelt).toString(16)}`,
+      `0x${assetFelt.toString()}`,
     ) as ContractAddress;
 
     const tokenAddress = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(tokenAddressFelt).toString(16)}`,
+      `0x${tokenAddressFelt.toString()}`,
     ) as ContractAddress;
 
     const [
@@ -109,7 +109,7 @@ export class LiquidityAddedIndexer {
     ] = event.data;
 
     const ownerAddress = validateAndParseAddress(
-      `0x${FieldElement.toBigInt(ownerFelt).toString(16)}`,
+      `0x${ownerFelt.toString()}`,
     ) as ContractAddress;
     // const amountRaw = uint256.uint256ToBN({
     //   low: FieldElement.toBigInt(amountLow),
@@ -157,14 +157,14 @@ export class LiquidityAddedIndexer {
       transactionHash,
       blockNumber: Number(blockNumber),
       blockHash,
-      blockTimestamp: new Date(Number(blockTimestamp.seconds) * 1000),
+      blockTimestamp: new Date(Number(blockTimestamp?.getTime()) * 1000),
       ownerAddress,
       assetAddress,
       memecoinAddress: tokenAddress,
       pool,
       id,
       // timestamp:blockTimestamp?.seconds,
-      date: new Date(Number(blockTimestamp.seconds) * 1000),
+      date: new Date(Number(blockTimestamp.getTime()) * 1000),
       timestamp: new Date(Number(blockTimestamp.seconds) * 1000)?.toString(),
       // amount: Number(amount),
       // price,
