@@ -8,22 +8,16 @@ import {
   TransferFromProofDto,
   TransferProofDto,
 } from "../dtos/generate-proof.dto.js";
-import { fileURLToPath } from "url";
 import { randomUUID } from "crypto";
 import os from "os";
 import { stringify as tomlStringify } from "smol-toml";
 
 const execPromise = promisify(exec);
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const TRANSFER_CIRCUIT_PATH = path.join(__dirname, "../../circuits/transfer");
-const TRANSFER_FROM_CIRCUIT_PATH = path.join(
-  __dirname,
-  "../../circuits/transfer_from"
-);
-const APPROVE_CIRCUIT_PATH = path.join(__dirname, "../../circuits/approve");
-const DEPOSIT_CIRCUIT_PATH = path.join(__dirname, "../../circuits/deposit");
+const TRANSFER_CIRCUIT_PATH = path.join(process.cwd(), "circuits/transfer");
+const TRANSFER_FROM_CIRCUIT_PATH = path.join(process.cwd(), "circuits/transfer_from");
+const APPROVE_CIRCUIT_PATH = path.join(process.cwd(), "circuits/approve");
+const DEPOSIT_CIRCUIT_PATH = path.join(process.cwd(), "circuits/deposit");
 
 export async function generateTransferProof(
   input: TransferProofDto

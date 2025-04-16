@@ -298,4 +298,3 @@ model profile_data {
   updated_at       DateTime? @default(now()) @db.Timestamp(6)
   nostr_event_id   String?
 }
-

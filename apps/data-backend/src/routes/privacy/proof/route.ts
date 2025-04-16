@@ -1,5 +1,5 @@
-import { ApproveProofDto, DepositProofDto, TransferFromProofDto, TransferProofDto } from "../../../dtos/generate-proof.dto.js";
-import { generateApproveProof, generateDepositProof, generateTransferFromProof, generateTransferProof } from "../../../services/proof.service.js";
+import { ApproveProofDto, DepositProofDto, TransferFromProofDto, TransferProofDto } from "../../../dtos/generate-proof.dto";
+import { generateApproveProof, generateDepositProof, generateTransferFromProof, generateTransferProof } from "../../../services/proof.service";
 import { FastifyInstance } from 'fastify';
 
 export default async function routes(fastify: FastifyInstance) {
