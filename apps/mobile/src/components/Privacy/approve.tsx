@@ -1,20 +1,21 @@
 import { useApprove } from "../../hooks/privacy/use-approve";
 import { useCallback, useState } from "react";
-import {Text, Button} from "react-native"
+import { View, Text, TouchableOpacity, ScrollView } from "react-native";
+import { Button } from "../Button";
 import { buildExplorerUrl } from "../../lib/utils";
 import ScanQRCode from "../QR/ScanCode";
 import { Input } from "../Input";
 import { useToast } from "src/hooks/modals";
+import Checkbox from "expo-checkbox";
 
 export const Approve: React.FC = () => {
   const { sendApprove, loading } = useApprove();
   const [shareViewingKey, setShareViewingKey] = useState<boolean>(false);
 
-  const {showToast} = useToast();
+  const { showToast } = useToast();
   const [scan, setScan] = useState(false);
   const [amount, setAmount] = useState("0");
   const [spender, setSpender] = useState({ address: "", publicKey: "" });
-
 
   const onApprove = useCallback(async () => {
     try {
@@ -26,108 +27,82 @@ export const Approve: React.FC = () => {
         amount: BigInt((parseFloat(amount) * 10 ** 6).toFixed(0)),
         shareViewingKey,
       });
-
-     
     } catch (e) {
-      toast({
+      showToast({
         title: "Something went wrong",
         description: (e as Error).message,
-        variant: "destructive",
+        type: "error",
+        // variant: "destructive",
       });
     }
-  }, [amount, spender, sendApprove]);
+  }, [amount, spender, sendApprove, showToast]);
 
-  const onScan = useCallback(
-    // (result: IDetectedBarcode[]) => {
-    //   const { address, publicKey } = JSON.parse(result[0].rawValue);
-    //   setSpender({ address, publicKey });
-
-    //   setScan(false);
-    // },
-    [spender, setScan]
-  );
+  const onScan = useCallback((result: any) => {
+    const { address, publicKey } = JSON.parse(result[0].rawValue);
+    setSpender({ address, publicKey });
+    setScan(false);
+  }, []);
 
   return (
-    <div className="flex flex-col p-6 bg-white rounded-3xl border-gradient">
-      <h1 className="font-semibold mb-6">Approve</h1>
+    <ScrollView style={{ padding: 20 }}>
+      <Text style={{ fontSize: 20, fontWeight: "600", marginBottom: 20 }}>Approve</Text>
 
       {scan ? (
-        <div>
+        <View>
           {/* <ScanQRCode onScan={onScan} /> */}
-        </div>
+        </View>
       ) : (
-        <>
-          <div className="space-y-8 mb-12">
-            <div className="gap-4 relative grid md:grid-cols-2">
-              <Button
-                onClick={() => setScan(!scan)}
-                size="icon"
-                variant="ghost"
-                className="absolute -top-2 right-0 h-6 w-6 text-blue-500 bg-transparent"
+        <View>
+          <View style={{ marginBottom: 24 }}>
+            <View style={{ marginBottom: 16 }}>
+              <TouchableOpacity 
+                onPress={() => setScan(!scan)}
+                style={{ position: "absolute", right: 0, top: -8 }}
               >
-                {/* <QrCode /> */}
-              </Button>
+                <Text>Scan</Text>
+              </TouchableOpacity>
 
-              <div className="grid w-full items-center gap-2">
-                <Text htmlFor="spender-address">Spender Address</Text>
+              <View style={{ marginBottom: 16 }}>
+                <Text>Spender Address</Text>
                 <Input
-                  id="spender-address"
-                  type="text"
                   placeholder="Spender Address"
-                  value={spender.address}
-                  onChange={(e) =>
-                    setSpender({ ...spender, address: e.target.value })
-                  }
+                  onChangeText={(text) => setSpender({ ...spender, address: text })}
                 />
-              </div>
+              </View>
 
-              <div className="grid w-full items-center gap-2">
+              <View>
                 <Text>Spender Public Key</Text>
                 <Input
-                  id="spender-public-key"
-                  // type="text"
-                  placeholder="Spender Public Key"
-                  value={spender.publicKey}
-                  onChange={(e) =>
-                    setSpender({ ...spender, publicKey: e.target.value })
-                  }
+                  placeholder="Spender Public Key" 
+                  onChangeText={(text) => setSpender({ ...spender, publicKey: text })}
                 />
-              </div>
-            </div>
+              </View>
+            </View>
 
-            <div className="space-y-4">
-              <div className="grid w-full items-center gap-2">
-                <Label htmlFor="amount">Amount</Label>
+            <View>
+              <View style={{ marginBottom: 16 }}>
+                <Text>Amount</Text>
                 <Input
-                  id="amount"
-                  // type="text"
                   placeholder="Amount"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChangeText={setAmount}
                 />
-              </div>
+              </View>
 
-              <div className="flex items-center space-x-2">
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
                 <Checkbox
-                  id="viewing-key"
-                  checked={shareViewingKey}
-                  onCheckedChange={(e) => setShareViewingKey(e as boolean)}
+                  value={shareViewingKey}
+                  onValueChange={(value) => setShareViewingKey(value)}
                 />
-                <label
-                  htmlFor="viewing-key"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Share viewing key
-                </label>
-              </div>
-            </div>
-          </div>
+                <Text style={{ marginLeft: 8 }}>Share viewing key</Text>
+              </View>
+            </View>
+          </View>
 
-          <Button className="w-full" onClick={onApprove} disabled={loading}>
-            {loading ? "Approving..." : "Approve"}
+          <Button onPress={onApprove}>
+            <Text>{loading ? "Approving..." : "Approve"}</Text>
           </Button>
-        </>
+        </View>
       )}
-    </div>
+    </ScrollView>
   );
 };

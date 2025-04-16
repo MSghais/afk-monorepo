@@ -1,4 +1,4 @@
-  import { ProofService } from "../../services/privacy/proof.service";
+import { ProofService } from "../../services/privacy/proof.service";
 import {
   useAccount,
   useContract,
@@ -20,12 +20,14 @@ import { useState } from "react";
 import { formatHex } from "../../lib/utils";
 import { notesService } from "../../services/privacy/notes.service";
 import { DefinitionsService } from "../../services/privacy/definitions.service";
+import { cairo, CallData } from "starknet";
 
 export const useDeposit = () => {
   const [loading, setLoading] = useState(false);
 
   const { address } = useAccount();
 
+  const { account } = useAccount();
   const { contract: enigmaContract } = useContract({
     abi: ENIGMA_ABI,
     address: ENIGMA_CONTRACT_ADDRESS,
@@ -119,8 +121,111 @@ export const useDeposit = () => {
     }
   };
 
+  const sendDepositMulticall = async (props: { amount: bigint }): Promise<string> => {
+    setLoading(true);
+    try {
+      if (!enigmaContract || !ethContract) {
+        throw new Error("Contract not initialized");
+      }
+
+      const ethAmount = (props.amount * ENG_TO_ETH_RATE) / ETH_TO_ENG_RATE;
+
+      // approve ETH
+      const approveCall = {
+        contractAddress: ethContract.address,
+        entrypoint: 'approve',
+        calldata: CallData.compile({
+          address: address,
+          amount: ethAmount ? cairo.uint256(ethAmount) : cairo.uint256(1),
+        }),
+      };
+
+      // const allowance = await ethContract.call("allowance", [
+      //   address,
+      //   ENIGMA_CONTRACT_ADDRESS,
+      // ]);
+      // if (allowance < ethAmount) {
+      //   await sendAsync([
+      //     ethContract.populate("approve", [ENIGMA_CONTRACT_ADDRESS, ethAmount]),
+      //   ]);
+      // }
+
+      // build deposit note
+      const callerAccount = await AccountService.getAccount();
+      const outReceiverNote = await DefinitionsService.note(
+        callerAccount.owner.address,
+        callerAccount.viewer.publicKey,
+        props.amount / WEI_TO_ENG
+      );
+
+
+      // generate deposit proof
+      const { notesArray: notes } = await notesService.getNotes();
+
+      const tree = new MerkleTree();
+
+      const orderedNotes = notes.sort((a, b) =>
+        parseInt((a.index! - b.index!).toString())
+      );
+      for (const note of orderedNotes) {
+        await tree.addCommitment(note.commitment);
+      }
+
+      const inRoot = tree.getRoot();
+
+      await tree.addCommitment(outReceiverNote.commitment);
+      await tree.addCommitment(0n);
+      const outRoot = tree.getRoot();
+      const outPathProof = tree.getProof(outReceiverNote.commitment);
+
+      const depositProof = await ProofService.generateDepositProof({
+        // accounts details
+        receiver_account: formatHex(callerAccount.owner.address),
+        // utxo inputs
+        in_commitment_root: formatHex(inRoot),
+        in_public_amount: formatHex(ethAmount),
+        // utxo outputs
+        out_receiver_commitment_bliding: formatHex(outReceiverNote.bliding),
+        out_receiver_commitment: formatHex(outReceiverNote.commitment),
+        // updated root
+        out_root: formatHex(outRoot),
+        out_subtree_root_path: outPathProof.path
+          .slice(1, MERKLE_TREE_DEPTH)
+          .map((e) => formatHex(e)),
+        out_subtree_root_direction_selector:
+          outPathProof.directionSelector.slice(1, MERKLE_TREE_DEPTH),
+      });
+
+
+
+      // approve ETH
+      const depositCall = {
+        contractAddress: enigmaContract.address,
+        entrypoint: 'deposit',
+        calldata: CallData.compile({
+          deposit_proof: depositProof,
+          enc_output: outReceiverNote.encOutput,
+        }),
+      };
+
+
+      const { transaction_hash } = await account.execute([approveCall, depositCall])
+
+      // const { transaction_hash } = await sendAsync([
+      //   enigmaContract.populate("deposit", [
+      //     depositProof,
+      //     outReceiverNote.encOutput,
+      //   ]),
+      // ]);
+
+      return transaction_hash;
+    } finally {
+      setLoading(false);
+    }
+  };
   return {
     sendDeposit,
     loading,
+    sendDepositMulticall,
   };
 };

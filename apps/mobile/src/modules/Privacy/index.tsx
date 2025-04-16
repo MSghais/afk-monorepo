@@ -11,6 +11,8 @@ import { Approve } from "../../components/Privacy/approve";
 
 import { Notes } from "../../components/Privacy/notes";
 import { Receive } from "../../components/Privacy/receive";
+import { WalletStarknet } from '../WalletModal/WalletStarknet';
+import { useAccount, useDisconnect } from '@starknet-react/core';
 
 enum Tab {
   Notes = "notes",
@@ -25,7 +27,9 @@ function PrivacyCoin() {
   const [show, setShow] = useState(false);
   const themedStyles = useStyles(styles);
   const { theme } = useTheme();
-
+  const [isWalletSelectOpen, setIsWalletSelectOpen] = useState(false);
+  const { account } = useAccount();
+  const disconnect = useDisconnect();
   return (
     <ScrollView style={themedStyles.container}>
       <View style={themedStyles.replyView}>
@@ -72,10 +76,37 @@ function PrivacyCoin() {
         </Pressable>
       </View>
 
-      {tab === Tab.Notes && <Notes show={show} />}
-      {tab === Tab.Send && <Transfer />}
-      {tab === Tab.Receive && <Receive />}
-      {tab === Tab.Approve && <Approve />}
+
+      <View>
+
+        <View>
+          <Button onPress={() => {
+            setIsWalletSelectOpen(!isWalletSelectOpen)
+
+            if (account?.address) {
+              disconnect?.disconnect()
+              // setIsWalletSelectOpen(false)
+
+            } else {
+              // walletModal.show();
+              // setIsWalletSelectOpen(true)
+              // connect?.connect()
+            }
+            // connectWallet()
+          }}>
+            <Text>{account?.address ? "Disconnect" : "Connect"}</Text>
+          </Button>
+
+          {isWalletSelectOpen && <WalletStarknet></WalletStarknet>}
+
+        </View>
+
+
+        {tab === Tab.Notes && <Notes show={show} />}
+        {tab === Tab.Send && <Transfer />}
+        {tab === Tab.Receive && <Receive />}
+        {tab === Tab.Approve && <Approve />}
+      </View>
     </ScrollView>
   );
 }

@@ -16,9 +16,10 @@ interface Note {
 
 export const Notes: React.FC<{ show: boolean }> = ({ show }) => {
   const { notes } = useUserNotes();
+  console.log("notes", notes);
   const [showBuy, setShowBuy] = useState(false);
   const [amount, setAmount] = useState("");
-  const { sendDeposit, loading: depositLoading } = useDeposit();
+  const { sendDeposit, loading: depositLoading, sendDepositMulticall } = useDeposit();
   const { theme } = useTheme();
   const themedStyles = useStyles(styles);
   const { showToast } = useToast();
@@ -31,7 +32,7 @@ export const Notes: React.FC<{ show: boolean }> = ({ show }) => {
   const onDeposit = useCallback(async () => {
     try {
       const amountBn = BigInt((parseFloat(amount) * 10 ** 18).toFixed(0));
-      const txHash = await sendDeposit({
+      const txHash = await sendDepositMulticall({
         amount: amountBn,
       });
       // TODO: Add toast notification
