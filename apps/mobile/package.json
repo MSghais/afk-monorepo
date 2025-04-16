@@ -32,6 +32,7 @@
   "dependencies": {
     "@atomiqlabs/chain-starknet": "^1.0.8",
     "@atomiqlabs/sdk": "^2.1.2",
+    "@aztec/bb.js": "^0.72.1",
     "@babel/runtime": "^7.24.8",
     "@cartridge/connector": "0.6.0",
     "@cartridge/controller": "0.6.0",
@@ -50,6 +51,7 @@
     "@lexical/react": "^0.29.0",
     "@metamask/sdk": "~0.30.0",
     "@noble/curves": "^1.4.0",
+    "@noir-lang/noir_js": "^1.0.0-beta.1",
     "@nostr-dev-kit/ndk": "2.10.1",
     "@nostr-dev-kit/ndk-wallet": "^0.2.0",
     "@rainbow-me/rainbowkit": "^2.1.5",
@@ -116,9 +118,11 @@
     "install": "^0.13.0",
     "jsqr": "^1.4.0",
     "lexical": "^0.29.0",
+    "libsodium-wrappers": "^0.7.15",
     "markdown-it": "^14.1.0",
     "memoize-one": "^6.0.0",
     "metro-react-native-babel-preset": "^0.77.0",
+    "mobile": "link:",
     "nativewind": "^4.1.23",
     "npx": "^10.2.2",
     "path": "^0.12.7",
@@ -179,7 +183,8 @@
     "postcss": "^8.4.23",
     "postinstall-postinstall": "^2.1.0",
     "prettier": "^3.3.3",
-    "typescript": "~5.3.3"
+    "typescript": "~5.3.3",
+    "libsodium-wrappers": "^0.7.15"
   },
   "private": true
 }

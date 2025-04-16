@@ -61,6 +61,7 @@ export enum SelectedTab {
   QUEST_FORM = 'QUEST_FORM',
   ALL_QUESTS = 'ALL_QUESTS',
   DAO_COMMUNITY = 'DAO_COMMUNITY',
+  PRIVACY = 'PRIVACY',
 }
 
 export const TABS_TIP_LIST: { screen?: string; title: string; tab: SelectedTab }[] = [
@@ -381,6 +382,11 @@ export const TABS_WALLET: { screen?: string; title: string; tab: SelectedTab }[]
     title: 'Ramp',
     screen: 'Ramp',
     tab: SelectedTab.ONRAMP_OFFRAMP,
+  },
+  {
+    title: 'Privacy',
+    screen: 'Privacy',
+    tab: SelectedTab.PRIVACY,
   },
   // {
   //   title: 'BTC Fi',

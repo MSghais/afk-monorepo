@@ -31,6 +31,18 @@ config.resolver = {
         return context.resolveRequest(context, moduleName, platform);
       }
     }
+    if (moduleName.startsWith('@aztec/')) {
+      try {
+        const path = require.resolve(moduleName);
+        return {
+          filePath: path,
+          type: 'sourceFile',
+        };
+      } catch (e) {
+        // Fall back to default resolution
+        return context.resolveRequest(context, moduleName, platform);
+      }
+    }
     // Default resolution for all other modules
     return context.resolveRequest(context, moduleName, platform);
   },

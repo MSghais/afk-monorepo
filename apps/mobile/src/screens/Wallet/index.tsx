@@ -17,6 +17,7 @@ import stylesheet from './styles';
 import { TipsComponent } from '../Tips/TipsComponent';
 import TokenSwapView from '../../modules/Swap';
 import { useAuth } from 'afk_nostr_sdk';
+import PrivacyCoin from 'src/modules/Privacy';
 
 export const Wallet: React.FC<WalletScreen> = ({ navigation }) => {
   const styles = useStyles(stylesheet);
@@ -106,11 +107,17 @@ export const Wallet: React.FC<WalletScreen> = ({ navigation }) => {
               </View>
             )}
 
-            {selectedTab == SelectedTab.SWAP_AVNU && (
-              <View style={{ display: 'flex', alignItems: 'center' }}>
-                <TokenSwapView />
-              </View>
-            )}
+              {selectedTab == SelectedTab.SWAP_AVNU && (
+                <View style={{ display: 'flex', alignItems: 'center' }}>
+                  <TokenSwapView />
+                </View>
+              )}
+
+              {selectedTab == SelectedTab.PRIVACY && (
+                <View>
+                  <PrivacyCoin />
+                </View>
+              )}
             {/*
 
             {selectedTab == SelectedTab.WALLET_INTERNAL && (
