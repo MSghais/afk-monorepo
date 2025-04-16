@@ -1,9 +1,10 @@
-import { useAccount } from "@/hooks/use-account";
-import { useCopyToClipboard } from "@/hooks/use-copy";
-import { formatHex, shortenString } from "@/lib/utils";
-import { CopyCheckIcon, CopyIcon } from "lucide-react";
+import { useAccount } from "../../hooks/privacy/use-account";
+import { useCopyToClipboard } from "../../hooks/privacy/use-copy";
+import { formatHex, shortenString } from "../../lib/utils";
 import { useMemo } from "react";
-import QRCode from "react-qr-code";
+import { View, TouchableOpacity, ScrollView } from 'react-native';
+import { Text } from "../Text";
+import QRCode from 'react-native-qrcode-svg';
 
 export const Receive: React.FC = () => {
   const { account } = useAccount();
@@ -18,19 +19,16 @@ export const Receive: React.FC = () => {
   }, [account]);
 
   return (
-    <div className="flex flex-col p-14 md:flex-row md:justify-evenly md:items-center bg-white border-gradient rounded-3xl">
-      <div className="flex justify-center mb-12 md:mb-0">
-        <QRCode
+    <ScrollView style={{ padding: 24, backgroundColor: 'white' }}>
+      <View style={{ alignItems: 'center', marginBottom: 48 }}>
+        {/* <QRCode
           size={230}
-          style={{ height: "auto", maxWidth: "215px", width: "100%" }}
-          fgColor="#1C1B78"
-
           value={qrValue}
-          viewBox={"0 0 256 256"}
-        />
-      </div>
+          color="#1C1B78"
+        /> */}
+      </View>
 
-      <div className="flex gap-4 justify-center md:flex-col md:gap-9">
+      <View style={{ gap: 32 }}>
         <AddressField
           value={formatHex(account?.owner.address ?? 0n)}
           label={"Address"}
@@ -39,8 +37,8 @@ export const Receive: React.FC = () => {
           value={formatHex(account?.viewer.publicKey ?? 0n)}
           label={"Public key"}
         />
-      </div>
-    </div>
+      </View>
+    </ScrollView>
   );
 };
 
@@ -51,20 +49,22 @@ const AddressField: React.FC<{ value: string; label: string }> = ({
   const { copyToClipboard, isCopied } = useCopyToClipboard({ timeout: 2000 });
 
   return (
-    <button
-      onClick={() => copyToClipboard(value)}
+    <TouchableOpacity
+      onPress={() => copyToClipboard(value)}
       disabled={isCopied}
-      className="flex gap-2 items-start justify-center text-muted-foreground bg-transparent"
+      style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}
     >
-      {isCopied ? (
-        <CopyCheckIcon className="h-5 w-5 m-1" />
-      ) : (
-        <CopyIcon className="h-5 w-5 m-1" />
-      )}
-      <div className="text-left">
-        <div className="text-sm">{shortenString(value)}</div>
-        <div className="text-xs">{label}</div>
-      </div>
-    </button>
+      <View style={{ padding: 4 }}>
+        {isCopied ? (
+          <Text>✓</Text>
+        ) : (
+          <Text>📋</Text>
+        )}
+      </View>
+      <View>
+        <Text style={{ fontSize: 14 }}>{shortenString(value)}</Text>
+        <Text style={{ fontSize: 12, color: '#666' }}>{label}</Text>
+      </View>
+    </TouchableOpacity>
   );
 };

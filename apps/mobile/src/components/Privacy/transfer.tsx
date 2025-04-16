@@ -1,18 +1,15 @@
-import { useTransfer } from "@/hooks/use-transfer";
+import { useTransfer } from "../../hooks/privacy/use-transfer";
 import { useCallback, useEffect, useState } from "react";
-import { Button, buttonVariants } from "./ui/button";
-import { Input } from "./ui/input";
-import { QrCode } from "lucide-react";
-import { IDetectedBarcode, Scanner } from "@yudiel/react-qr-scanner";
-import { useTransferFrom } from "@/hooks/use-transfer-from";
-import { useToast } from "@/hooks/use-toast";
-import { ToastAction } from "@radix-ui/react-toast";
-import { buildExplorerUrl, formatHex } from "@/lib/utils";
-import { Label } from "./ui/label";
-import { useAccount } from "@/hooks/use-account";
+import { TextInput, View, Text as RNText, TouchableOpacity, ScrollView } from 'react-native';
+import { useTransferFrom } from "../../hooks/privacy/use-transfer-from";
+import { buildExplorerUrl, formatHex } from "../../lib/utils";
+import { useAccount } from "../../hooks/privacy/use-account";
+import { useToast } from "src/hooks/modals";
+import { Text } from "../Text";
+import { Button } from "../Button";
 
 export const Transfer: React.FC = () => {
-  const { toast } = useToast();
+  const { showToast } = useToast();
   const { account } = useAccount();
   const { sendTransfer, loading: transferLoading } = useTransfer();
   const { sendTransferFrom, loading: transferFromLoading } = useTransferFrom();
@@ -47,36 +44,18 @@ export const Transfer: React.FC = () => {
             },
           });
 
-      toast({
+      showToast({
         title: "Transaction sent successfully",
-        action: (
-          <ToastAction
-            className={buttonVariants({ variant: "link", size: "sm" })}
-            onClick={() => window.open(buildExplorerUrl(txHash), "_blank")}
-            altText="View transaction"
-          >
-            View transaction
-          </ToastAction>
-        ),
+        type: "success",
       });
     } catch (e) {
-      toast({
+      showToast({
         title: "Something went wrong",
         description: (e as Error).message,
-        variant: "destructive",
+        type: "error",
       });
     }
   }, [amount, to, from, sendTransfer]);
-
-  const onScan = useCallback(
-    (result: IDetectedBarcode[]) => {
-      const { address, publicKey } = JSON.parse(result[0].rawValue);
-      setTo({ address, publicKey });
-
-      setScan(false);
-    },
-    [setTo, setScan]
-  );
 
   useEffect(() => {
     if (account && !transferFrom) {
@@ -88,120 +67,132 @@ export const Transfer: React.FC = () => {
   }, [account, transferFrom]);
 
   return (
-    <div className="flex flex-col p-6 bg-white rounded-3xl border-gradient">
-      <h1 className="font-semibold mb-6">Transfer</h1>
+    <ScrollView style={{ padding: 24, backgroundColor: 'white' }}>
+      <Text style={{ fontWeight: '600', marginBottom: 24 }}>Transfer</Text>
 
       {scan ? (
-        <div>
-          <Scanner onScan={onScan} />
-        </div>
+        <View>
+          {/* Scanner component would go here */}
+        </View>
       ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-2 mb-8">
-            <div className="space-y-4 relative">
-              <div className="absolute top-2 right-0 ">
-                {transferFrom ? (
-                  <button
-                    className="text-sm bg-transparent text-blue-500 hover:underline"
-                    onClick={() => setTransferFrom(false)}
-                  >
-                    Reset
-                  </button>
-                ) : (
-                  <button
-                    className="text-sm bg-transparent text-blue-500 hover:underline"
-                    onClick={() => setTransferFrom(true)}
-                  >
-                    Edit
-                  </button>
-                )}
-              </div>
+        <View>
+          <View style={{ marginBottom: 32 }}>
+            <View style={{ marginBottom: 16 }}>
+              <View style={{ position: 'relative' }}>
+                <TouchableOpacity 
+                  style={{ position: 'absolute', top: 8, right: 0 }}
+                  onPress={() => setTransferFrom(!transferFrom)}
+                >
+                  <Text style={{ color: '#3B82F6', fontSize: 14 }}>
+                    {transferFrom ? "Reset" : "Edit"}
+                  </Text>
+                </TouchableOpacity>
 
-              <div className="grid w-full items-center gap-2">
-                <Label htmlFor="from-address">{transferFrom ? "From Address" : "From My Address"}</Label>
-                <Input
-                  id="from-address"
-                  type="text"
-                  placeholder="0x..."
-                  value={from.address}
-                  disabled={!transferFrom}
-                  onChange={(e) =>
-                    setFrom({ ...from, address: e.target.value })
-                  }
-                />
-              </div>
+                <View style={{ marginBottom: 16 }}>
+                  <Text>{transferFrom ? "From Address" : "From My Address"}</Text>
+                  <TextInput
+                    style={{ 
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                      borderRadius: 8,
+                      padding: 12,
+                      marginTop: 8
+                    }}
+                    placeholder="0x..."
+                    value={from.address}
+                    editable={!transferFrom}
+                    onChangeText={(text) => setFrom({ ...from, address: text })}
+                  />
+                </View>
 
-              <div className="grid w-full items-center gap-2">
-                <Label htmlFor="from-public-key">{transferFrom ? "From Public Key" : "From My Public Key"}</Label>
-                <Input
-                  id="from-public-key"
-                  type="text"
-                  placeholder="0x..."
-                  disabled={!transferFrom}
-                  value={from.publicKey}
-                  onChange={(e) =>
-                    setFrom({ ...from, publicKey: e.target.value })
-                  }
-                />
-              </div>
-            </div>
+                <View style={{ marginBottom: 16 }}>
+                  <Text>{transferFrom ? "From Public Key" : "From My Public Key"}</Text>
+                  <TextInput
+                    style={{ 
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                      borderRadius: 8,
+                      padding: 12,
+                      marginTop: 8
+                    }}
+                    placeholder="0x..."
+                    value={from.publicKey}
+                    editable={!transferFrom}
+                    onChangeText={(text) => setFrom({ ...from, publicKey: text })}
+                  />
+                </View>
+              </View>
 
-            <div className="space-y-4 relative">
-              <Button
-                onClick={() => setScan(!scan)}
-                size="icon"
-                variant="ghost"
-                className="absolute top-2 right-0 h-6 w-6 text-blue-500 bg-transparent"
-              >
-                <QrCode />
-              </Button>
+              <View style={{ position: 'relative' }}>
+                <TouchableOpacity
+                  style={{ position: 'absolute', top: 8, right: 0 }}
+                  onPress={() => setScan(!scan)}
+                >
+                  <Text style={{ color: '#3B82F6' }}>Scan</Text>
+                </TouchableOpacity>
 
-              <div className="grid w-full items-center gap-2">
-                <Label htmlFor="to-address">To Address</Label>
-                <Input
-                  id="to-address"
-                  placeholder="0x..."
-                  type="text"
-                  value={to.address}
-                  onChange={(e) => setTo({ ...to, address: e.target.value })}
-                />
-              </div>
+                <View style={{ marginBottom: 16 }}>
+                  <Text>To Address</Text>
+                  <TextInput
+                    style={{ 
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                      borderRadius: 8,
+                      padding: 12,
+                      marginTop: 8
+                    }}
+                    placeholder="0x..."
+                    value={to.address}
+                    onChangeText={(text) => setTo({ ...to, address: text })}
+                  />
+                </View>
 
-              <div className="grid w-full items-center gap-2">
-                <Label htmlFor="to-public-key">To Public Key</Label>
-                <Input
-                  id="to-public-key"
-                  placeholder="0x..."
-                  type="text"
-                  value={to.publicKey}
-                  onChange={(e) => setTo({ ...to, publicKey: e.target.value })}
-                />
-              </div>
-            </div>
-          </div>
+                <View style={{ marginBottom: 16 }}>
+                  <Text>To Public Key</Text>
+                  <TextInput
+                    style={{ 
+                      borderWidth: 1,
+                      borderColor: '#E5E7EB',
+                      borderRadius: 8,
+                      padding: 12,
+                      marginTop: 8
+                    }}
+                    placeholder="0x..."
+                    value={to.publicKey}
+                    onChangeText={(text) => setTo({ ...to, publicKey: text })}
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
 
-          <div className="grid gap-2 w-full mb-12">
-            <Label htmlFor="amount">Amount</Label>
-            <Input
-              id="amount"
-              type="text"
+          <View style={{ marginBottom: 48 }}>
+            <Text>Amount</Text>
+            <TextInput
+              style={{ 
+                borderWidth: 1,
+                borderColor: '#E5E7EB',
+                borderRadius: 8,
+                padding: 12,
+                marginTop: 8
+              }}
               placeholder="0.0"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChangeText={setAmount}
+              keyboardType="numeric"
             />
-          </div>
+          </View>
 
           <Button
-            className="w-full"
-            onClick={onTransfer}
+            onPress={onTransfer}
             disabled={transferFromLoading || transferLoading}
           >
-            {transferFromLoading || transferLoading
-              ? "Transferring..."
-              : "Transfer"}
+            <Text>
+              {transferFromLoading || transferLoading ? "Transferring..." : "Transfer"}
+            </Text>
           </Button>
-        </>
+        </View>
       )}
-    </div>
+    </ScrollView>
   );
 };

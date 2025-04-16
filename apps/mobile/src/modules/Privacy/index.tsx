@@ -1,15 +1,16 @@
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { Button } from "src/components";
-import { Notes } from "../../components/Privacy/notes";
-// import { Receive } from "../../components/Privacy/receive";
-// import { Transfer } from "../../components/Privacy/transfer";
-// import { Approve } from "../../components/Privacy/approve";
 import { useBalance } from "../../hooks/privacy/use-balance";
 import { formatTokenAmount } from "../../lib/utils";
 import { useState } from "react";
 import styles from './styles';
 import { useStyles } from '../../hooks/useStyles';
 import { useTheme } from '../../hooks/useTheme';
+import { Transfer } from 'src/components/Privacy/transfer';
+import { Approve } from "../../components/Privacy/approve";
+
+import { Notes } from "../../components/Privacy/notes";
+import { Receive } from "../../components/Privacy/receive";
 
 enum Tab {
   Notes = "notes",
@@ -72,9 +73,9 @@ function PrivacyCoin() {
       </View>
 
       {tab === Tab.Notes && <Notes show={show} />}
-      {/* {tab === Tab.Send && <Transfer />} */}
-      {/* {tab === Tab.Receive && <Receive />} */}
-      {/* {tab === Tab.Approve && <Approve />} */}
+      {tab === Tab.Send && <Transfer />}
+      {tab === Tab.Receive && <Receive />}
+      {tab === Tab.Approve && <Approve />}
     </ScrollView>
   );
 }

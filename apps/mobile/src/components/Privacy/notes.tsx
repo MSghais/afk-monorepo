@@ -6,7 +6,7 @@ import { formatTokenAmount } from "../../lib/utils";
 import { useTheme } from "../../hooks/useTheme";
 import { useStyles } from "../../hooks/useStyles";
 import styles from './notes/styles';
-
+import { useToast } from "src/hooks/modals";
 interface Note {
   commitment: bigint;
   index: bigint;
@@ -21,6 +21,7 @@ export const Notes: React.FC<{ show: boolean }> = ({ show }) => {
   const { sendDeposit, loading: depositLoading } = useDeposit();
   const { theme } = useTheme();
   const themedStyles = useStyles(styles);
+  const { showToast } = useToast();
 
   const sortedNotes = useMemo(
     () => notes.sort((a: Note, b: Note) => parseInt((b.index - a.index).toString())),
@@ -34,8 +35,19 @@ export const Notes: React.FC<{ show: boolean }> = ({ show }) => {
         amount: amountBn,
       });
       // TODO: Add toast notification
+
+      showToast({
+        title: "Deposit successful",
+        description: txHash,
+        type: "success",
+      });
     } catch (e) {
       // TODO: Add error toast notification
+      showToast({
+        title: "Deposit failed",
+        description: (e as Error).message,
+        type: "error",
+      });
     }
   }, [amount]);
 

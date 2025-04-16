@@ -21,6 +21,8 @@ import routesShareUserRoutes from './routes/indexer/share-user';
 import tipServiceRoute from './routes/indexer/tip';
 import uploadFile from './routes/upload/upload-file';
 import daoServiceRoute from './routes/indexer/dao';
+import healthRouter from './routes/privacy/health/route';
+import proofRouter from './routes/privacy/proof/route';
 // import getOtp from "./routes/otp/getOtp";
 // import verifyOtp from "./routes/otp/verifyOtp";
 // import type { Account } from 'starknet'
@@ -54,6 +56,8 @@ function declareRoutes(
   fastify.register(routesShareUserRoutes);
   fastify.register(uploadFile);
   fastify.register(daoServiceRoute);
+
+  fastify.register(proofRouter);
 
   // fastify.register(getOtp, twilio_services?.verifications);
   // fastify.register(verifyOtp, deployer, twilio_services?.verificationChecks);
