@@ -1,7 +1,15 @@
 module.exports = function (api) {
   api.cache(true);
   return {
-    presets: [['babel-preset-expo', { jsxImportSource: 'nativewind' }], 'nativewind/babel'],
+    presets: [
+      ['babel-preset-expo', { 
+        jsxImportSource: 'nativewind',
+        web: {
+          unstable_transformProfile: 'hermes-canary'
+        }
+      }],
+      'nativewind/babel'
+    ],
     plugins: [
       [
         'module-resolver',
@@ -14,6 +22,10 @@ module.exports = function (api) {
             'pixel_ui': '../../packages/pixel_ui/src',
           },
           extensions: [
+            '.web.js',
+            '.web.jsx',
+            '.web.ts',
+            '.web.tsx',
             '.ios.ts',
             '.android.ts',
             '.ts',
@@ -28,6 +40,10 @@ module.exports = function (api) {
       ],
       'react-native-reanimated/plugin',
       "@babel/plugin-proposal-export-namespace-from",
+      ["@babel/plugin-transform-runtime", {
+        regenerator: true,
+        useESModules: true
+      }]
     ],
   };
 };

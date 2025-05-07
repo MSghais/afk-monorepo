@@ -41,8 +41,7 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "deepLinking": true,
-      "bundler": "metro",
-      "output": "static"
+      "bundler": "metro"
     },
     "plugins": [
       [
@@ -86,14 +85,6 @@
         {
           "merchantIdentifier": "",
           "enableGooglePay": true
-        }
-      ],
-      [
-        "react-native-nfc-manager",
-        {
-          "nfcPermission": "Allow $(PRODUCT_NAME) to scan NFC tags.",
-          "selectIdentifiers": ["A0000002471001"],
-          "systemCodes": ["8008"]
         }
       ]
     ],

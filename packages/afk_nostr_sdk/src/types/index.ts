@@ -52,6 +52,6 @@ export interface ICashuInvoice {
 export interface ProofInvoice extends Proof, ICashuInvoice {}
 
 // Export all type declarations
-export * from './global';
+export * from './global.d';
 
 // Add any other type exports here
