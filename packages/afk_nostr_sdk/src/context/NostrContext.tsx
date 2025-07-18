@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 
 import { useSettingsStore } from '../store';
 import { useAuth } from '../store/auth';
-import { AFK_RELAYS } from '../utils/relay';
+import { AFK_RELAYS, connectWithRetry, connectFast, relayHealthManager } from '../utils/relay';
 import { checkIsConnected } from '../hooks/connect';
 
 // Create a separate type for the NDK instance to avoid direct type conflicts
@@ -20,6 +20,9 @@ export type NostrContextType = {
   setNdk: (ndk: NDKInstance) => void;
   isNdkConnected: boolean;
   setIsNdkConnected: (isNdkConnected: boolean) => void;
+  reconnect: () => Promise<void>;
+  getFailedRelays: () => any[];
+  resetFailedRelays: () => void;
 };
 
 export const NostrContext = createContext<NostrContextType | null>(null);
@@ -61,6 +64,49 @@ export const NostrProvider: React.FC<React.PropsWithChildren> = ({ children }) =
     }),
   );
 
+  // Function to connect with retry logic
+  const connectToRelays = async (useFastMode: boolean = false) => {
+    try {
+      const currentRelays = relays ?? AFK_RELAYS;
+      
+      let success: boolean;
+      if (useFastMode) {
+        success = await connectFast(ndk, currentRelays);
+      } else {
+        success = await connectWithRetry(ndk, currentRelays, 2);
+      }
+      
+      if (success) {
+        setIsNdkConnected(true);
+        console.log('Successfully connected to relays');
+      } else {
+        setIsNdkConnected(false);
+        console.error('Failed to connect to any relays');
+      }
+    } catch (error) {
+      console.error('Error in connectToRelays:', error);
+      setIsNdkConnected(false);
+    }
+  };
+
+  // Manual reconnect function
+  const reconnect = async () => {
+    console.log('Manual reconnect triggered');
+    setIsNdkConnected(false);
+    await connectToRelays(false); // Use health-filtered mode for manual reconnect
+  };
+
+  // Get failed relays
+  const getFailedRelays = () => {
+    return relayHealthManager.getFailedRelays();
+  };
+
+  // Reset failed relays
+  const resetFailedRelays = () => {
+    relayHealthManager.resetAllRelays();
+    console.log('All failed relays have been reset');
+  };
+
   useEffect(() => {
     const newNdk = new NDK({
       explicitRelayUrls: relays ?? AFK_RELAYS,
@@ -71,13 +117,10 @@ export const NostrProvider: React.FC<React.PropsWithChildren> = ({ children }) =
           : undefined,
     });
 
-    newNdk.connect().then(() => {
-      setNdk(newNdk);
-      setIsNdkConnected(true);
-    }).catch((err) => {
-      console.error('Failed to connect to relays', err);
-      setIsNdkConnected(false);
-    });
+    setNdk(newNdk);
+    
+    // Use fast mode for initial connection
+    connectToRelays(true);
 
     // Use any type to avoid type incompatibility issues
     const ndkCashuWalletNew = new NDKCashuWallet(newNdk as any);
@@ -101,6 +144,12 @@ export const NostrProvider: React.FC<React.PropsWithChildren> = ({ children }) =
     const checkConnection = () => {
       const connected = ndk.pool.connectedRelays().length > 0;
       setIsConnected(connected);
+      
+      // Only try to reconnect if we're not connected and haven't tried recently
+      if (!connected && !isNdkConnected) {
+        console.log('No connected relays detected, attempting to reconnect...');
+        connectToRelays(false); // Use health-filtered mode for reconnection
+      }
     };
 
     const interval = setInterval(checkConnection, 1000 * 60); // Check every minute
@@ -109,19 +158,37 @@ export const NostrProvider: React.FC<React.PropsWithChildren> = ({ children }) =
     checkConnection();
 
     return () => clearInterval(interval); // Cleanup on component unmount
-  }, [ndk, setIsConnected]);
+  }, [ndk, setIsConnected, isNdkConnected]);
 
+  // Simplified connection check - only run once after NDK is set
   useEffect(() => {
-    checkIsConnected(ndk).then((res) => {
-      setIsNdkConnected(true);
-    }).catch((err) => {
-      setIsNdkConnected(false);
-    });
+    if (ndk && !isNdkConnected) {
+      // Quick check without full reconnection
+      const connected = ndk.pool.connectedRelays().length > 0;
+      if (connected) {
+        setIsNdkConnected(true);
+      } else {
+        // Only try to reconnect if not already connected
+        connectToRelays(false); // Use health-filtered mode for reconnection
+      }
+    }
   }, [ndk]);
 
   return (
     <NostrContext.Provider
-      value={{ ndk, nip07Signer, nwcNdk, ndkWallet, ndkCashuWallet, setNdk, isNdkConnected, setIsNdkConnected }}>
+      value={{ 
+        ndk, 
+        nip07Signer, 
+        nwcNdk, 
+        ndkWallet, 
+        ndkCashuWallet, 
+        setNdk, 
+        isNdkConnected, 
+        setIsNdkConnected,
+        reconnect,
+        getFailedRelays,
+        resetFailedRelays
+      }}>
       {children}
     </NostrContext.Provider>
   );

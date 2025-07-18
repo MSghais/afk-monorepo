@@ -1,5 +1,15 @@
 import { useUIStore } from '@/store/uiStore';
-import { AFK_RELAYS, checkIsConnected, RELAY_AFK_PRODUCTION, useAuth, useNostrContext, useRelayAuth, useRelayAuthState } from 'afk_nostr_sdk';
+import { 
+  AFK_RELAYS, 
+  checkIsConnected, 
+  RELAY_AFK_PRODUCTION, 
+  useAuth, 
+  useNostrContext, 
+  useRelayAuth, 
+  useRelayAuthState,
+  RelayHealthStatus,
+  useRelayHealth
+} from 'afk_nostr_sdk';
 import { useEffect } from 'react';
 
 const AuthNostrProviderComponent = () => {
@@ -7,11 +17,17 @@ const AuthNostrProviderComponent = () => {
   const { ndk, isNdkConnected, setIsNdkConnected } = useNostrContext();
   const { setupAuthListeners, authenticateWithRelay, isAuthenticating } = useRelayAuth();
   const { getAuthStatus, areAllRelaysAuthenticated } = useRelayAuthState();
-  const {showToast} = useUIStore();
+  const { showToast } = useUIStore();
+  const { 
+    failedRelays, 
+    connectionStatus, 
+    relayStats, 
+    hasFailedRelays,
+    resetAllRelays 
+  } = useRelayHealth();
+
   useEffect(() => {
-
     if (publicKey && privateKey && isNdkConnected) {
-
       setupAuthListeners();
       handleMultiAuth(AFK_RELAYS);
     }
@@ -29,26 +45,41 @@ const AuthNostrProviderComponent = () => {
   }, [isNdkConnected]);
 
   const handleMultiAuth = async (relayUrls: string[]) => {
-    // console.log('handleMultiAuth', relayUrls);
     try {
       await checkIsConnected(ndk);
       const origin = window && window.location?.origin ? window.location.origin : process.env.NEXT_PUBLIC_APP_URL;
       await Promise.all(relayUrls.map(url => authenticateWithRelay(url)));
       
       setIsNdkConnected(true);
-      // showToast({
-      //   message: 'Authenticated with all relays!',
-      //   description: 'You can now use the app',
-      //   type: 'success',
-      // });
     } catch (error) {
       console.error('Failed to authenticate with one or more relays:', error);
+      
+      // Show toast if there are failed relays
+      if (hasFailedRelays) {
+        showToast({
+          message: 'Some relays are experiencing issues',
+          description: `${failedRelays.length} relay(s) failed to connect. The app will continue with available relays.`,
+          type: 'warning',
+        });
+      }
     }
+  };
+
+  const handleRelayReset = () => {
+    showToast({
+      message: 'Relays reset',
+      description: 'Failed relays have been reset and connection will be retried.',
+      type: 'info',
+    });
   };
 
   return (
     <>
-   
+      {/* Display relay health status */}
+      <RelayHealthStatus 
+        showDetails={hasFailedRelays} 
+        onRelayReset={handleRelayReset}
+      />
     </>
   );
 };
