@@ -17,6 +17,14 @@ const (
 	defaultOutCsidCmd = 3   // commands
 )
 
+// Stream key management
+var validStreamKeys = map[string]bool{
+	"test123":     true,
+	"live_key_1":  true,
+	"stream_abc":  true,
+	"demo_stream": true,
+}
+
 // ---------- AMF0 minimal (String, Number, Boolean, Null, Object) ----------
 type amf0Val interface{}
 
@@ -251,6 +259,51 @@ type chunkState struct {
 
 // Global chunk state map for tracking partial messages
 var chunkStates = make(map[uint8]*chunkState)
+
+// ---------- Authentication ----------
+func extractStreamKey(payload []byte) (string, error) {
+	// Parse AMF0 command: "publish", txnId, null, streamName, mode
+	// We need to skip the first two values (command name and txnId)
+	offset := 0
+	
+	// Skip command name
+	_, n, ok := amf0ReadValue(payload[offset:])
+	if !ok {
+		return "", fmt.Errorf("failed to read command name")
+	}
+	offset += n
+	
+	// Skip transaction ID
+	_, n, ok = amf0ReadValue(payload[offset:])
+	if !ok {
+		return "", fmt.Errorf("failed to read transaction ID")
+	}
+	offset += n
+	
+	// Skip null (usually present)
+	_, n, ok = amf0ReadValue(payload[offset:])
+	if !ok {
+		return "", fmt.Errorf("failed to read null value")
+	}
+	offset += n
+	
+	// Read stream name (this is our stream key)
+	streamName, n, ok := amf0ReadValue(payload[offset:])
+	if !ok {
+		return "", fmt.Errorf("failed to read stream name")
+	}
+	
+	key, ok := streamName.(string)
+	if !ok {
+		return "", fmt.Errorf("stream name is not a string")
+	}
+	
+	return key, nil
+}
+
+func validateStreamKey(streamKey string) bool {
+	return validStreamKeys[streamKey]
+}
 
 func readMsg(conn net.Conn) (rtmpMsg, error) {
 	var msg rtmpMsg
