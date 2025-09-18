@@ -444,14 +444,35 @@ func extractStreamKey(payload []byte) (string, error) {
 }
 
 func validateStreamKey(streamKey string) bool {
+	fmt.Printf("🔍 Validating stream key: %s\n", streamKey)
+	
 	// Check static stream keys first
 	if validStreamKeys[streamKey] {
+		fmt.Printf("✅ Valid static stream key: %s\n", streamKey)
 		return true
 	}
 
 	// Check if it's a Nostr-generated stream key
 	_, exists := streamKeyToPubkey[streamKey]
-	return exists
+	if exists {
+		fmt.Printf("✅ Valid Nostr stream key: %s\n", streamKey)
+		return true
+	}
+	
+	fmt.Printf("❌ Invalid stream key: %s\n", streamKey)
+	fmt.Printf("Available static keys: %v\n", getStaticKeys())
+	fmt.Printf("Available Nostr keys: %d\n", len(nostrStreamKeys))
+	
+	return false
+}
+
+// Helper function to get static keys for debugging
+func getStaticKeys() []string {
+	keys := make([]string, 0, len(validStreamKeys))
+	for key := range validStreamKeys {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 // generateStreamKeyFromPubkey creates a deterministic stream key from a Nostr pubkey
