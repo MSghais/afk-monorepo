@@ -3,8 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLivestreamWebSocket } from '@/contexts/LivestreamWebSocketContext';
 import { useAuth } from 'afk_nostr_sdk';
 import { useLiveActivity } from 'afk_nostr_sdk';
-import { useNostrStreamAuth } from '@/services/nostrStreamAuth';
-import { useNostrContext } from 'afk_nostr_sdk';
+import { useGenerateStreamKey } from '@/services/nostrStreamAuth';
 import styles from './styles.module.scss';
 import { Icon } from '../small/icon-component';
 
@@ -22,7 +21,6 @@ export const HostStudio: React.FC<HostStudioProps> = ({
   onBack
 }) => {
   const { publicKey, privateKey } = useAuth();
-  const { ndk } = useNostrContext();
   const {
     connect,
     disconnect,
@@ -38,7 +36,7 @@ export const HostStudio: React.FC<HostStudioProps> = ({
   const { createEvent, updateEvent } = useLiveActivity();
 
   // Nostr stream authentication
-  const { authenticateStream, generateStreamKey } = useNostrStreamAuth(ndk);
+  const generateStreamKeyMutation = useGenerateStreamKey();
 
   const [isGoingLive, setIsGoingLive] = useState(false);
   const [streamStatus, setStreamStatus] = useState<'idle' | 'connecting' | 'connected' | 'streaming' | 'error' | 'loading'>('idle');
@@ -161,15 +159,13 @@ export const HostStudio: React.FC<HostStudioProps> = ({
       console.log('🔑 Generating Nostr-authenticated stream key for:', streamId);
       
       // Generate stream key using Nostr authentication
-      const result = await generateStreamKey(
+      const result = await generateStreamKeyMutation.mutateAsync({
         streamId,
-        publicKey,
-        privateKey,
-        `Live Stream - ${streamId.slice(0, 8)}`,
-        'Live streaming session with OBS Studio'
-      );
+        title: `Live Stream - ${streamId.slice(0, 8)}`,
+        description: 'Live streaming session with OBS Studio'
+      });
       
-      if (result.success) {
+      if (result.success && result.streamKey && result.rtmpUrl) {
         setStreamKey(result.streamKey);
         setRtmpUrl(result.rtmpUrl);
         console.log('✅ Nostr-authenticated stream key generated:', result.streamKey);

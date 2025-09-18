@@ -34,15 +34,17 @@ The integration allows users to:
 
 ### 1. Frontend (PWA)
 
-#### NostrStreamAuthService (`apps/pwa/src/services/nostrStreamAuth.ts`)
-- Creates and signs Nostr events for stream authentication
-- Generates deterministic stream keys from Nostr events
-- Handles authentication with RTMP server
+#### Nostr Stream Authentication Hooks (`apps/pwa/src/services/nostrStreamAuth.ts`)
+- `useCreateStreamAuthEvent()`: Creates and signs Nostr events using afk_nostr_sdk
+- `useGenerateStreamKey()`: Generates stream keys with Nostr authentication
+- `useAuthenticateWithRtmp()`: Direct RTMP server authentication
+- Uses proper NDKPrivateKeySigner for event signing
 
 #### HostStudio Component (`apps/pwa/src/components/Livestream/HostStudio.tsx`)
-- Updated to use Nostr authentication for OBS streaming
+- Updated to use afk_nostr_sdk hooks for Nostr authentication
 - Generates signed stream keys when user selects OBS mode
 - Provides copy-paste interface for OBS configuration
+- Integrated with existing useAuth() and useNostrContext()
 
 ### 2. Data Backend (`apps/data-backend`)
 
@@ -128,9 +130,9 @@ pnpm dev
 
 ### 3. Generate Stream Key
 - User clicks "Generate Stream Key" button
-- Frontend creates Nostr event with stream details
-- Event is signed with user's private key
-- Signed event is sent to data-backend
+- Frontend uses `useGenerateStreamKey()` hook from afk_nostr_sdk
+- Hook creates and signs Nostr event using NDKPrivateKeySigner
+- Signed event is sent to data-backend for stream key generation
 
 ### 4. Backend Processing
 - Data-backend receives signed Nostr event
@@ -164,6 +166,52 @@ pnpm dev
 - WebSocket communication between components
 - Stream status updates in real-time
 - Automatic cleanup of expired keys
+
+## Frontend Hooks
+
+### useCreateStreamAuthEvent()
+Creates and signs a Nostr event for stream authentication.
+
+```typescript
+const createStreamAuthEvent = useCreateStreamAuthEvent();
+
+const result = await createStreamAuthEvent.mutateAsync({
+  streamId: 'stream-123',
+  title: 'My Live Stream',
+  description: 'Stream description'
+});
+```
+
+### useGenerateStreamKey()
+Generates a stream key using Nostr authentication and sends it to the data-backend.
+
+```typescript
+const generateStreamKey = useGenerateStreamKey();
+
+const result = await generateStreamKey.mutateAsync({
+  streamId: 'stream-123',
+  title: 'My Live Stream',
+  description: 'Stream description'
+});
+
+if (result.success) {
+  console.log('Stream Key:', result.streamKey);
+  console.log('RTMP URL:', result.rtmpUrl);
+}
+```
+
+### useAuthenticateWithRtmp()
+Directly authenticates with the RTMP server using a Nostr event.
+
+```typescript
+const authenticateWithRtmp = useAuthenticateWithRtmp();
+
+const result = await authenticateWithRtmp.mutateAsync({
+  streamId: 'stream-123',
+  title: 'My Live Stream',
+  description: 'Stream description'
+});
+```
 
 ## API Endpoints
 
