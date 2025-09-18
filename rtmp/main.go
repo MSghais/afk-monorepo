@@ -145,13 +145,14 @@ func amf0ReadValue(p []byte) (amf0Val, int, bool) {
 func mathFloat64ToBits(f float64) uint64 { return *(*uint64)(unsafe.Pointer(&f)) }
 func bitsToFloat64(u uint64) float64     { return *(*float64)(unsafe.Pointer(&u)) }
 
-// ---------- RTMP writer (fmt0 only, single-chunk payload ok) ----------
+// ---------- RTMP writer (fmt0 only, single-chunk payload ok, with ext TS) ----------
 func writeChunk(w io.Writer, csid uint8, timestamp uint32, msgType uint8, msgStreamID uint32, payload []byte) error {
 	// Basic header: fmt=0, csid (3..63 assumed)
 	bh := []byte{(0 << 6) | (csid & 0x3F)}
 	if _, err := w.Write(bh); err != nil {
 		return err
 	}
+
 	// Message header (fmt0): ts(3), len(3), type(1), msgStreamID(4 LE)
 	ts := timestamp & 0xFFFFFF
 	mh := []byte{byte(ts >> 16), byte(ts >> 8), byte(ts)}
@@ -161,6 +162,17 @@ func writeChunk(w io.Writer, csid uint8, timestamp uint32, msgType uint8, msgStr
 	ms := make([]byte, 4)
 	binary.LittleEndian.PutUint32(ms, msgStreamID)
 	mh = append(mh, ms...)
+
+	// Handle extended timestamp
+	if timestamp >= 0xFFFFFF {
+		mh[0] = 0xFF
+		mh[1] = 0xFF
+		mh[2] = 0xFF
+		ext := make([]byte, 4)
+		binary.BigEndian.PutUint32(ext, timestamp)
+		mh = append(mh, ext...)
+	}
+
 	if _, err := w.Write(mh); err != nil {
 		return err
 	}
@@ -218,78 +230,181 @@ func handshake(conn net.Conn) error {
 	return err
 }
 
-// ---------- Inbound message reassembly (fmt0 + fmt3 continuations, no ext TS) ----------
+// ---------- Inbound message reassembly (fmt0 + fmt1 + fmt2 + fmt3 continuations, with ext TS) ----------
 type rtmpMsg struct {
 	csid        uint8
 	msgType     uint8
 	msgStreamID uint32
+	timestamp   uint32
 	payload     []byte
 }
 
+type chunkState struct {
+	csid        uint8
+	msgType     uint8
+	msgStreamID uint32
+	timestamp   uint32
+	msgLen      uint32
+	got         int
+	payload     []byte
+}
+
+// Global chunk state map for tracking partial messages
+var chunkStates = make(map[uint8]*chunkState)
+
 func readMsg(conn net.Conn) (rtmpMsg, error) {
 	var msg rtmpMsg
-	var timestamp uint32
-	var msgLen uint32
-	var got int
 
-	// first chunk header (fmt0)
+	// Read basic header
 	bh := make([]byte, 1)
 	if _, err := io.ReadFull(conn, bh); err != nil {
 		return msg, err
 	}
+
 	fmtVal := bh[0] >> 6
 	csid := bh[0] & 0x3F
-	if fmtVal != 0 {
-		return msg, fmt.Errorf("only fmt0 first chunk supported")
-	}
 
-	mh := make([]byte, 11)
-	if _, err := io.ReadFull(conn, mh); err != nil {
-		return msg, err
-	}
-	timestamp = uint32(mh[0])<<16 | uint32(mh[1])<<8 | uint32(mh[2])
-	msgLen = uint32(mh[3])<<16 | uint32(mh[4])<<8 | uint32(mh[5])
-	msgType := mh[6]
-	msgStreamID := binary.LittleEndian.Uint32(mh[7:11])
-
-	payload := make([]byte, 0, msgLen)
-
-	toRead := int(minU32(msgLen, inChunkSize))
-	tmp := make([]byte, toRead)
-	if _, err := io.ReadFull(conn, tmp); err != nil {
-		return msg, err
-	}
-	payload = append(payload, tmp...)
-	got += toRead
-
-	// continuation chunks (fmt3)
-	for got < int(msgLen) {
-		// basic header again
-		if _, err := io.ReadFull(conn, bh); err != nil {
+	// Handle extended CSID
+	if csid == 0 {
+		ext := make([]byte, 1)
+		if _, err := io.ReadFull(conn, ext); err != nil {
 			return msg, err
 		}
-		if (bh[0]>>6) != 3 || (bh[0]&0x3F) != csid {
-			return msg, fmt.Errorf("expected fmt3 continuation on same csid")
+		csid = ext[0] + 64
+	} else if csid == 1 {
+		ext := make([]byte, 2)
+		if _, err := io.ReadFull(conn, ext); err != nil {
+			return msg, err
 		}
-		remain := int(msgLen) - got
-		chunk := remain
-		if chunk > inChunkSize {
-			chunk = inChunkSize
+		csid = uint8(binary.BigEndian.Uint16(ext) + 64)
+	}
+
+	var state *chunkState
+	var exists bool
+
+	switch fmtVal {
+	case 0: // fmt0: full message header
+		mh := make([]byte, 11)
+		if _, err := io.ReadFull(conn, mh); err != nil {
+			return msg, err
 		}
-		tmp = tmp[:chunk]
+
+		timestamp := uint32(mh[0])<<16 | uint32(mh[1])<<8 | uint32(mh[2])
+		msgLen := uint32(mh[3])<<16 | uint32(mh[4])<<8 | uint32(mh[5])
+		msgType := mh[6]
+		msgStreamID := binary.LittleEndian.Uint32(mh[7:11])
+
+		// Handle extended timestamp
+		if timestamp == 0xFFFFFF {
+			ext := make([]byte, 4)
+			if _, err := io.ReadFull(conn, ext); err != nil {
+				return msg, err
+			}
+			timestamp = binary.BigEndian.Uint32(ext)
+			fmt.Printf("Extended timestamp: %d\n", timestamp)
+		}
+
+		state = &chunkState{
+			csid:        csid,
+			msgType:     msgType,
+			msgStreamID: msgStreamID,
+			timestamp:   timestamp,
+			msgLen:      msgLen,
+			got:         0,
+			payload:     make([]byte, 0, msgLen),
+		}
+		chunkStates[csid] = state
+
+	case 1: // fmt1: timestamp delta + length + type
+		state, exists = chunkStates[csid]
+		if !exists {
+			return msg, fmt.Errorf("fmt1 without previous state for csid %d", csid)
+		}
+
+		mh := make([]byte, 7)
+		if _, err := io.ReadFull(conn, mh); err != nil {
+			return msg, err
+		}
+
+		tsDelta := uint32(mh[0])<<16 | uint32(mh[1])<<8 | uint32(mh[2])
+		msgLen := uint32(mh[3])<<16 | uint32(mh[4])<<8 | uint32(mh[5])
+		msgType := mh[6]
+
+		// Handle extended timestamp delta
+		if tsDelta == 0xFFFFFF {
+			ext := make([]byte, 4)
+			if _, err := io.ReadFull(conn, ext); err != nil {
+				return msg, err
+			}
+			tsDelta = binary.BigEndian.Uint32(ext)
+		}
+
+		state.timestamp += tsDelta
+		state.msgLen = msgLen
+		state.msgType = msgType
+		state.got = 0
+
+	case 2: // fmt2: timestamp delta only
+		state, exists = chunkStates[csid]
+		if !exists {
+			return msg, fmt.Errorf("fmt2 without previous state for csid %d", csid)
+		}
+
+		mh := make([]byte, 3)
+		if _, err := io.ReadFull(conn, mh); err != nil {
+			return msg, err
+		}
+
+		tsDelta := uint32(mh[0])<<16 | uint32(mh[1])<<8 | uint32(mh[2])
+
+		// Handle extended timestamp delta
+		if tsDelta == 0xFFFFFF {
+			ext := make([]byte, 4)
+			if _, err := io.ReadFull(conn, ext); err != nil {
+				return msg, err
+			}
+			tsDelta = binary.BigEndian.Uint32(ext)
+		}
+
+		state.timestamp += tsDelta
+		state.got = 0
+
+	case 3: // fmt3: no message header
+		state, exists = chunkStates[csid]
+		if !exists {
+			return msg, fmt.Errorf("fmt3 without previous state for csid %d", csid)
+		}
+		// No changes to state
+
+	default:
+		return msg, fmt.Errorf("unsupported chunk format: %d", fmtVal)
+	}
+
+	// Read payload
+	toRead := int(minU32(state.msgLen-uint32(state.got), inChunkSize))
+
+	if toRead > 0 {
+		tmp := make([]byte, toRead)
 		if _, err := io.ReadFull(conn, tmp); err != nil {
 			return msg, err
 		}
-		payload = append(payload, tmp...)
-		got += chunk
+		state.payload = append(state.payload, tmp...)
+		state.got += toRead
 	}
 
-	msg.csid = csid
-	msg.msgType = msgType
-	msg.msgStreamID = msgStreamID
-	msg.payload = payload
-	_ = timestamp
-	return msg, nil
+	// If message is complete, return it and clean up state
+	if state.got >= int(state.msgLen) {
+		msg.csid = state.csid
+		msg.msgType = state.msgType
+		msg.msgStreamID = state.msgStreamID
+		msg.timestamp = state.timestamp
+		msg.payload = state.payload
+		delete(chunkStates, csid)
+		return msg, nil
+	}
+
+	// Message not complete, return empty message (caller should continue reading)
+	return rtmpMsg{}, nil
 }
 
 func minU32(a, b uint32) uint32 {
@@ -382,6 +497,12 @@ func handleConn(conn net.Conn) {
 			fmt.Println("read msg err:", err)
 			return
 		}
+
+		// Skip empty messages (partial messages that need more chunks)
+		if len(m.payload) == 0 && m.msgType == 0 {
+			continue
+		}
+
 		switch m.msgType {
 		case 20: // AMF0 command
 			nameV, u0, ok := amf0ReadValue(m.payload)
