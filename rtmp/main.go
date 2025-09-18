@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"math/rand"
 	"net"
+	"os"
+	"strings"
 	"time"
 	"unsafe"
 )
@@ -23,6 +26,29 @@ var validStreamKeys = map[string]bool{
 	"live_key_1":  true,
 	"stream_abc":  true,
 	"demo_stream": true,
+	"secret_key":  true,
+	"my_live_key": true,
+}
+
+// AddStreamKey adds a new valid stream key
+func addStreamKey(key string) {
+	validStreamKeys[key] = true
+	fmt.Printf("Added stream key: %s\n", key)
+}
+
+// RemoveStreamKey removes a stream key
+func removeStreamKey(key string) {
+	delete(validStreamKeys, key)
+	fmt.Printf("Removed stream key: %s\n", key)
+}
+
+// ListStreamKeys returns all valid stream keys (for debugging)
+func listStreamKeys() []string {
+	keys := make([]string, 0, len(validStreamKeys))
+	for key := range validStreamKeys {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 // ---------- AMF0 minimal (String, Number, Boolean, Null, Object) ----------
@@ -265,39 +291,39 @@ func extractStreamKey(payload []byte) (string, error) {
 	// Parse AMF0 command: "publish", txnId, null, streamName, mode
 	// We need to skip the first two values (command name and txnId)
 	offset := 0
-	
+
 	// Skip command name
 	_, n, ok := amf0ReadValue(payload[offset:])
 	if !ok {
 		return "", fmt.Errorf("failed to read command name")
 	}
 	offset += n
-	
+
 	// Skip transaction ID
 	_, n, ok = amf0ReadValue(payload[offset:])
 	if !ok {
 		return "", fmt.Errorf("failed to read transaction ID")
 	}
 	offset += n
-	
+
 	// Skip null (usually present)
 	_, n, ok = amf0ReadValue(payload[offset:])
 	if !ok {
 		return "", fmt.Errorf("failed to read null value")
 	}
 	offset += n
-	
+
 	// Read stream name (this is our stream key)
 	streamName, n, ok := amf0ReadValue(payload[offset:])
 	if !ok {
 		return "", fmt.Errorf("failed to read stream name")
 	}
-	
+
 	key, ok := streamName.(string)
 	if !ok {
 		return "", fmt.Errorf("stream name is not a string")
 	}
-	
+
 	return key, nil
 }
 
@@ -579,7 +605,45 @@ func handleConn(conn net.Conn) {
 					return
 				}
 			case "publish":
-				// onStatus on NetStream
+				// Extract and validate stream key
+				streamKey, err := extractStreamKey(m.payload)
+				if err != nil {
+					fmt.Printf("Failed to extract stream key: %v\n", err)
+					// Send error response
+					if err := writeAMF0Command(conn, defaultOutCsidCmd, streamID,
+						"onStatus", float64(0), nil,
+						[][2]amf0Val{
+							{"level", "error"},
+							{"code", "NetStream.Publish.BadName"},
+							{"description", "Invalid stream key format."},
+						},
+					); err != nil {
+						fmt.Println("write publish error onStatus err:", err)
+						return
+					}
+					continue
+				}
+
+				// Validate stream key
+				if !validateStreamKey(streamKey) {
+					fmt.Printf("Invalid stream key: %s\n", streamKey)
+					// Send error response
+					if err := writeAMF0Command(conn, defaultOutCsidCmd, streamID,
+						"onStatus", float64(0), nil,
+						[][2]amf0Val{
+							{"level", "error"},
+							{"code", "NetStream.Publish.BadName"},
+							{"description", "Invalid stream key. Access denied."},
+						},
+					); err != nil {
+						fmt.Println("write publish error onStatus err:", err)
+						return
+					}
+					continue
+				}
+
+				// Stream key is valid, send success response
+				fmt.Printf("Valid stream key: %s\n", streamKey)
 				if err := writeAMF0Command(conn, defaultOutCsidCmd, streamID,
 					"onStatus", float64(0), nil,
 					[][2]amf0Val{
@@ -603,6 +667,52 @@ func handleConn(conn net.Conn) {
 	}
 }
 
+// Admin interface for managing stream keys
+func adminInterface() {
+	scanner := bufio.NewScanner(os.Stdin)
+	fmt.Println("Admin commands:")
+	fmt.Println("  add <key>     - Add a stream key")
+	fmt.Println("  remove <key>  - Remove a stream key")
+	fmt.Println("  list          - List all stream keys")
+	fmt.Println("  quit          - Exit server")
+
+	for {
+		fmt.Print("admin> ")
+		if !scanner.Scan() {
+			break
+		}
+
+		line := strings.TrimSpace(scanner.Text())
+		parts := strings.Fields(line)
+
+		if len(parts) == 0 {
+			continue
+		}
+
+		switch parts[0] {
+		case "add":
+			if len(parts) < 2 {
+				fmt.Println("Usage: add <key>")
+				continue
+			}
+			addStreamKey(parts[1])
+		case "remove":
+			if len(parts) < 2 {
+				fmt.Println("Usage: remove <key>")
+				continue
+			}
+			removeStreamKey(parts[1])
+		case "list":
+			fmt.Printf("Valid stream keys: %v\n", listStreamKeys())
+		case "quit":
+			fmt.Println("Shutting down server...")
+			os.Exit(0)
+		default:
+			fmt.Println("Unknown command. Use: add, remove, list, or quit")
+		}
+	}
+}
+
 func main() {
 	rand.Seed(time.Now().UnixNano())
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", rtmpPort))
@@ -610,6 +720,12 @@ func main() {
 		panic(err)
 	}
 	fmt.Printf("RTMP (stdlib-only) listening on :%d\n", rtmpPort)
+	fmt.Printf("Valid stream keys: %v\n", listStreamKeys())
+	fmt.Println("Connect with: rtmp://localhost:1935/live/<stream_key>")
+
+	// Start admin interface in a goroutine
+	go adminInterface()
+
 	for {
 		c, err := ln.Accept()
 		if err != nil {
