@@ -16,6 +16,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/gorilla/websocket"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -56,6 +57,94 @@ type NostrAuthResponse struct {
 // Dynamic stream keys generated from Nostr authentication
 var nostrStreamKeys = make(map[string]string)   // pubkey -> stream_key
 var streamKeyToPubkey = make(map[string]string) // stream_key -> pubkey
+
+// WebSocket connection to data-backend
+var dataBackendConn *websocket.Conn
+var dataBackendUrl = "ws://localhost:5050/ws"
+
+// Connect to data-backend WebSocket
+func connectToDataBackend() {
+	for {
+		conn, _, err := websocket.DefaultDialer.Dial(dataBackendUrl, nil)
+		if err != nil {
+			fmt.Printf("Failed to connect to data-backend WebSocket: %v\n", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		dataBackendConn = conn
+		fmt.Println("✅ Connected to data-backend WebSocket")
+
+		// Handle incoming messages
+		go func() {
+			for {
+				_, message, err := conn.ReadMessage()
+				if err != nil {
+					fmt.Printf("WebSocket read error: %v\n", err)
+					break
+				}
+
+				var msg map[string]interface{}
+				if err := json.Unmarshal(message, &msg); err != nil {
+					fmt.Printf("Failed to parse WebSocket message: %v\n", err)
+					continue
+				}
+
+				handleWebSocketMessage(msg)
+			}
+		}()
+
+		// Keep connection alive
+		conn.SetPingHandler(func(string) error {
+			return conn.WriteMessage(websocket.PongMessage, nil)
+		})
+
+		// Wait for connection to close
+		conn.Close()
+		dataBackendConn = nil
+		fmt.Println("❌ Disconnected from data-backend WebSocket, reconnecting...")
+		time.Sleep(5 * time.Second)
+	}
+}
+
+// Handle WebSocket messages from data-backend
+func handleWebSocketMessage(msg map[string]interface{}) {
+	msgType, ok := msg["type"].(string)
+	if !ok {
+		return
+	}
+
+	switch msgType {
+	case "stream-started":
+		streamKey, _ := msg["streamKey"].(string)
+		pubkey, _ := msg["pubkey"].(string)
+		fmt.Printf("📡 Stream started notification: %s (pubkey: %s)\n", streamKey, pubkey[:8]+"...")
+
+	case "stream-ended":
+		streamKey, _ := msg["streamKey"].(string)
+		fmt.Printf("📡 Stream ended notification: %s\n", streamKey)
+
+	case "stream-key-registered":
+		streamKey, _ := msg["streamKey"].(string)
+		pubkey, _ := msg["pubkey"].(string)
+		fmt.Printf("📡 Stream key registered notification: %s (pubkey: %s)\n", streamKey, pubkey[:8]+"...")
+
+	default:
+		fmt.Printf("📡 Unknown WebSocket message type: %s\n", msgType)
+	}
+}
+
+// Send message to data-backend
+func sendToDataBackend(msg map[string]interface{}) {
+	if dataBackendConn == nil {
+		fmt.Println("⚠️ No connection to data-backend")
+		return
+	}
+
+	if err := dataBackendConn.WriteJSON(msg); err != nil {
+		fmt.Printf("Failed to send message to data-backend: %v\n", err)
+	}
+}
 
 // AddStreamKey adds a new valid stream key
 func addStreamKey(key string) {
@@ -762,6 +851,51 @@ func handleConn(conn net.Conn) {
 	}
 }
 
+// HTTP handler for receiving stream keys from data-backend
+func handleStreamKeyRegistration(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		StreamID  string `json:"streamId"`
+		StreamKey string `json:"streamKey"`
+		Pubkey    string `json:"pubkey"`
+		Timestamp string `json:"timestamp"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request format: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Add the stream key to our valid keys
+	addStreamKey(req.StreamKey)
+
+	// Store the mapping for Nostr authentication
+	nostrStreamKeys[req.Pubkey] = req.StreamKey
+	streamKeyToPubkey[req.StreamKey] = req.Pubkey
+
+	fmt.Printf("✅ Stream key registered: %s (pubkey: %s)\n", req.StreamKey, req.Pubkey[:8]+"...")
+
+	// Notify data-backend about the stream key registration
+	sendToDataBackend(map[string]interface{}{
+		"type":      "stream-key-registered",
+		"streamKey": req.StreamKey,
+		"pubkey":    req.Pubkey,
+		"streamId":  req.StreamID,
+		"timestamp": req.Timestamp,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":   true,
+		"message":   "Stream key registered successfully",
+		"streamKey": req.StreamKey,
+	})
+}
+
 // HTTP handler for Nostr authentication
 func handleNostrAuth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
@@ -869,10 +1003,14 @@ func adminInterface() {
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
-	// Start HTTP server for Nostr authentication
+	// Start WebSocket connection to data-backend
+	go connectToDataBackend()
+
+	// Start HTTP server for Nostr authentication and stream key registration
 	http.HandleFunc("/auth/nostr", handleNostrAuth)
+	http.HandleFunc("/api/stream-key", handleStreamKeyRegistration)
 	go func() {
-		fmt.Println("HTTP server for Nostr auth listening on :8080")
+		fmt.Println("HTTP server for Nostr auth and stream key registration listening on :8080")
 		if err := http.ListenAndServe(":8080", nil); err != nil {
 			fmt.Printf("HTTP server error: %v\n", err)
 		}

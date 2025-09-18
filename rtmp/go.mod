@@ -4,7 +4,10 @@ go 1.23.1
 
 toolchain go1.24.6
 
-require github.com/nbd-wtf/go-nostr v0.39.0
+require (
+	github.com/nbd-wtf/go-nostr v0.39.0
+	github.com/gorilla/websocket v1.5.1
+)
 
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.3.4 // indirect

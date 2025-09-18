@@ -3,6 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLivestreamWebSocket } from '@/contexts/LivestreamWebSocketContext';
 import { useAuth } from 'afk_nostr_sdk';
 import { useLiveActivity } from 'afk_nostr_sdk';
+import { useNostrStreamAuth } from '@/services/nostrStreamAuth';
+import { useNostrContext } from 'afk_nostr_sdk';
 import styles from './styles.module.scss';
 import { Icon } from '../small/icon-component';
 
@@ -19,7 +21,8 @@ export const HostStudio: React.FC<HostStudioProps> = ({
   onGoLive,
   onBack
 }) => {
-  const { publicKey } = useAuth();
+  const { publicKey, privateKey } = useAuth();
+  const { ndk } = useNostrContext();
   const {
     connect,
     disconnect,
@@ -33,6 +36,9 @@ export const HostStudio: React.FC<HostStudioProps> = ({
 
   // NIP-53 Live Activity management
   const { createEvent, updateEvent } = useLiveActivity();
+
+  // Nostr stream authentication
+  const { authenticateStream, generateStreamKey } = useNostrStreamAuth(ndk);
 
   const [isGoingLive, setIsGoingLive] = useState(false);
   const [streamStatus, setStreamStatus] = useState<'idle' | 'connecting' | 'connected' | 'streaming' | 'error' | 'loading'>('idle');
@@ -143,37 +149,36 @@ export const HostStudio: React.FC<HostStudioProps> = ({
     };
   }, [streamId, isConnected]);
 
-  // Generate stream key for OBS
-  const generateStreamKey = async () => {
-    if (!streamId) return;
+  // Generate stream key for OBS with Nostr authentication
+  const generateObsStreamKey = async () => {
+    if (!streamId || !publicKey || !privateKey) {
+      setError('Missing required authentication data');
+      return;
+    }
     
     try {
       setIsGeneratingStreamKey(true);
-      console.log('🔑 Generating stream key for:', streamId);
+      console.log('🔑 Generating Nostr-authenticated stream key for:', streamId);
       
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5050';
-      const response = await fetch(`${backendUrl}/livestream/${streamId}/rtmp-key`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          streamId,
-          publicKey: publicKey || 'anonymous'
-        })
-      });
+      // Generate stream key using Nostr authentication
+      const result = await generateStreamKey(
+        streamId,
+        publicKey,
+        privateKey,
+        `Live Stream - ${streamId.slice(0, 8)}`,
+        'Live streaming session with OBS Studio'
+      );
       
-      if (response.ok) {
-        const data = await response.json();
-        setStreamKey(data.streamKey);
-        setRtmpUrl(data.rtmpUrl);
-        console.log('✅ Stream key generated:', data.streamKey);
+      if (result.success) {
+        setStreamKey(result.streamKey);
+        setRtmpUrl(result.rtmpUrl);
+        console.log('✅ Nostr-authenticated stream key generated:', result.streamKey);
       } else {
-        throw new Error('Failed to generate stream key');
+        throw new Error(result.error || 'Failed to generate stream key');
       }
     } catch (error) {
-      console.error('❌ Error generating stream key:', error);
-      setError('Failed to generate stream key for OBS');
+      console.error('❌ Error generating Nostr stream key:', error);
+      setError('Failed to generate Nostr-authenticated stream key for OBS');
     } finally {
       setIsGeneratingStreamKey(false);
     }
@@ -668,7 +673,7 @@ export const HostStudio: React.FC<HostStudioProps> = ({
                   </p>
                   <button
                     className={styles.generateKeyButton}
-                    onClick={generateStreamKey}
+                    onClick={generateObsStreamKey}
                     disabled={isGeneratingStreamKey}
                     aria-label="Generate stream key"
                   >

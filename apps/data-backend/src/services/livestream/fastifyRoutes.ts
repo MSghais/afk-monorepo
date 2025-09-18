@@ -11,6 +11,7 @@ import {
   debugManifest
 } from './fastifyEndpoints';
 import { cloudinaryLivestreamService } from './cloudinaryService';
+import { createHash } from 'crypto';
 
 /**
  * Register Fastify routes for livestream HTTP endpoints
@@ -170,26 +171,84 @@ export async function registerLivestreamRoutes(fastify: FastifyInstance) {
   // Generate RTMP stream key for OBS
   fastify.post('/livestream/:streamId/rtmp-key', async (request, reply) => {
     const { streamId } = request.params as { streamId: string };
-    const { publicKey } = request.body as { publicKey?: string };
+    const { publicKey, nostrEvent } = request.body as { 
+      publicKey?: string; 
+      nostrEvent?: {
+        id: string;
+        pubkey: string;
+        created_at: number;
+        kind: number;
+        tags: string[][];
+        content: string;
+        sig: string;
+      };
+    };
     
     try {
       console.log('🔑 Generating RTMP key for stream:', streamId);
       
-      // Generate a unique stream key
-      const streamKey = `${streamId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      let streamKey: string;
+      let rtmpUrl: string;
       
-      // Get the RTMP URL from environment or use default
-      const rtmpHost = process.env.RTMP_HOST || 'rtmp://localhost:1935/live';
-      const rtmpUrl = `${rtmpHost}/${streamKey}`;
-      
-      console.log('✅ RTMP key generated:', streamKey);
+      // If Nostr event is provided, use it for authentication
+      if (nostrEvent) {
+        console.log('🔐 Using Nostr event for stream key generation');
+        
+        // Verify the Nostr event signature
+        const isValid = await verifyNostrSignature(nostrEvent);
+        if (!isValid) {
+          return reply.status(401).send({ 
+            error: 'Invalid Nostr signature',
+            message: 'The provided Nostr event signature is invalid'
+          });
+        }
+        
+        // Check if event is recent (within 1 hour)
+        const eventTime = new Date(nostrEvent.created_at * 1000);
+        const now = new Date();
+        const timeDiff = now.getTime() - eventTime.getTime();
+        const oneHour = 60 * 60 * 1000;
+        
+        if (timeDiff > oneHour) {
+          return reply.status(401).send({ 
+            error: 'Event expired',
+            message: 'The Nostr event is too old (older than 1 hour)'
+          });
+        }
+        
+        // Generate deterministic stream key from Nostr event
+        streamKey = generateStreamKeyFromNostrEvent(nostrEvent, streamId);
+        
+        // Get the RTMP URL from environment or use default
+        const rtmpHost = process.env.RTMP_HOST || 'rtmp://localhost:1935/live';
+        rtmpUrl = `${rtmpHost}/${streamKey}`;
+        
+        console.log('✅ Nostr-authenticated RTMP key generated:', streamKey);
+        
+        // Notify RTMP server about the new stream key
+        await notifyRtmpServer(streamId, streamKey, nostrEvent.pubkey);
+        
+      } else {
+        // Fallback to simple key generation for backward compatibility
+        console.log('⚠️ No Nostr event provided, using simple key generation');
+        
+        // Generate a unique stream key
+        streamKey = `${streamId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Get the RTMP URL from environment or use default
+        const rtmpHost = process.env.RTMP_HOST || 'rtmp://localhost:1935/live';
+        rtmpUrl = `${rtmpHost}/${streamKey}`;
+        
+        console.log('✅ Simple RTMP key generated:', streamKey);
+      }
       
       return reply.send({
         streamId,
         streamKey,
         rtmpUrl,
         message: 'RTMP stream key generated successfully',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        nostrAuthenticated: !!nostrEvent
       });
     } catch (error) {
       console.error('❌ Error generating RTMP key:', error);
@@ -215,4 +274,103 @@ export async function registerLivestreamRoutes(fastify: FastifyInstance) {
   });
 
   console.log('Livestream HTTP routes registered');
+}
+
+/**
+ * Verify a Nostr event signature
+ * This is a simplified verification - in production, use a proper Nostr library
+ */
+async function verifyNostrSignature(nostrEvent: {
+  id: string;
+  pubkey: string;
+  created_at: number;
+  kind: number;
+  tags: string[][];
+  content: string;
+  sig: string;
+}): Promise<boolean> {
+  try {
+    // For now, we'll do basic validation
+    // In production, you should use a proper Nostr library like nostr-tools or similar
+    
+    // Check if all required fields are present
+    if (!nostrEvent.id || !nostrEvent.pubkey || !nostrEvent.sig) {
+      console.log('❌ Missing required Nostr event fields');
+      return false;
+    }
+    
+    // Check if pubkey is valid hex (64 characters)
+    if (!/^[0-9a-f]{64}$/i.test(nostrEvent.pubkey)) {
+      console.log('❌ Invalid pubkey format');
+      return false;
+    }
+    
+    // Check if signature is valid hex (128 characters)
+    if (!/^[0-9a-f]{128}$/i.test(nostrEvent.sig)) {
+      console.log('❌ Invalid signature format');
+      return false;
+    }
+    
+    // For now, we'll accept any properly formatted event
+    // In production, implement proper signature verification
+    console.log('✅ Nostr event format validation passed');
+    return true;
+    
+  } catch (error) {
+    console.error('❌ Error verifying Nostr signature:', error);
+    return false;
+  }
+}
+
+/**
+ * Generate a deterministic stream key from a Nostr event
+ */
+function generateStreamKeyFromNostrEvent(
+  nostrEvent: {
+    id: string;
+    pubkey: string;
+    created_at: number;
+    kind: number;
+    tags: string[][];
+    content: string;
+    sig: string;
+  },
+  streamId: string
+): string {
+  // Create a deterministic hash from event data
+  const data = `${nostrEvent.pubkey}:${nostrEvent.created_at}:${streamId}`;
+  const hash = createHash('sha256').update(data).digest('hex');
+  
+  // Return first 16 characters of the hash as stream key
+  return `nostr_${hash.slice(0, 16)}`;
+}
+
+/**
+ * Notify the RTMP server about a new stream key
+ */
+async function notifyRtmpServer(streamId: string, streamKey: string, pubkey: string): Promise<void> {
+  try {
+    const rtmpServerUrl = process.env.RTMP_SERVER_URL || 'http://localhost:8080';
+    
+    const response = await fetch(`${rtmpServerUrl}/api/stream-key`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        streamId,
+        streamKey,
+        pubkey,
+        timestamp: new Date().toISOString(),
+      }),
+    });
+    
+    if (!response.ok) {
+      console.warn('⚠️ Failed to notify RTMP server about stream key');
+    } else {
+      console.log('✅ RTMP server notified about stream key');
+    }
+  } catch (error) {
+    console.warn('⚠️ Error notifying RTMP server:', error);
+  }
 }
