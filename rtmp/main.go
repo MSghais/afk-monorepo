@@ -492,17 +492,16 @@ func generateStreamKeyFromPubkey(pubkey string) string {
 
 // verifyNostrSignature verifies a Nostr event signature using proper nostr.Event
 func verifyNostrSignature(authReq *NostrAuthRequest) bool {
-	// For testing purposes, accept mock signatures that are all 'a' characters
-	if authReq.Sig == strings.Repeat("a", 128) {
-		fmt.Println("🔧 Accepting mock signature for testing")
-		return true
-	}
+	// Mock signatures and test pubkeys disabled for production
+	// if authReq.Sig == strings.Repeat("a", 128) {
+	//	fmt.Println("🔧 Accepting mock signature for testing")
+	//	return true
+	// }
 
-	// For testing purposes, also accept the test pubkey
-	if authReq.PubKey == "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" {
-		fmt.Println("🔧 Accepting test pubkey for testing")
-		return true
-	}
+	// if authReq.PubKey == "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" {
+	//	fmt.Println("🔧 Accepting test pubkey for testing")
+	//	return true
+	// }
 
 	// Create nostr.Event from the request data (matching algo-relay approach)
 	nostrTags := nostr.Tags{}
@@ -523,10 +522,15 @@ func verifyNostrSignature(authReq *NostrAuthRequest) bool {
 	// Verify the signature using the proper nostr method
 	ok, err := event.CheckSignature()
 	if err != nil {
-		fmt.Printf("Nostr signature verification error: %v\n", err)
+		fmt.Printf("❌ Nostr signature verification error: %v\n", err)
 		return false
 	}
-	return ok
+	if !ok {
+		fmt.Printf("❌ Invalid Nostr signature for pubkey: %s\n", authReq.PubKey[:8]+"...")
+		return false
+	}
+	fmt.Printf("✅ Valid Nostr signature verified for pubkey: %s\n", authReq.PubKey[:8]+"...")
+	return true
 }
 
 // authenticateWithNostr handles Nostr-based authentication

@@ -12,6 +12,7 @@ import {
 } from './fastifyEndpoints';
 import { cloudinaryLivestreamService } from './cloudinaryService';
 import { createHash } from 'crypto';
+import { verifyEvent } from "nostr-tools";
 
 /**
  * Register Fastify routes for livestream HTTP endpoints
@@ -195,7 +196,7 @@ export async function registerLivestreamRoutes(fastify: FastifyInstance) {
         console.log('🔐 Using Nostr event for stream key generation');
         
         // Verify the Nostr event signature
-        const isValid = await verifyNostrSignature(nostrEvent);
+        const isValid = await verifyEvent(nostrEvent);
         if (!isValid) {
           return reply.status(401).send({ 
             error: 'Invalid Nostr signature',
@@ -309,15 +310,15 @@ async function verifyNostrSignature(nostrEvent: {
       return false;
     }
     
-    // For testing purposes, accept mock signatures that are all 'a' characters
-    if (nostrEvent.sig === 'a'.repeat(128)) {
-      console.log('🔧 Accepting mock signature for testing');
-      return true;
-    }
+    // Mock signatures disabled for production
+    // if (nostrEvent.sig === 'a'.repeat(128)) {
+    //   console.log('🔧 Accepting mock signature for testing');
+    //   return true;
+    // }
     
+    // TODO: Implement proper Nostr signature verification using nostr-tools or similar
     // For now, we'll do basic validation and accept properly formatted events
-    // In a production environment, you would implement proper signature verification
-    // using libraries like nostr-tools or similar
+    // In a production environment, you should implement proper signature verification
     
     // Additional validation: check if event is not too old
     const eventTime = new Date(nostrEvent.created_at * 1000);
