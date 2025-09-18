@@ -5,8 +5,8 @@ go 1.23.1
 toolchain go1.24.6
 
 require (
-	github.com/nbd-wtf/go-nostr v0.39.0
 	github.com/gorilla/websocket v1.5.1
+	github.com/nbd-wtf/go-nostr v0.39.0
 )
 
 require (
@@ -24,5 +24,6 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0 // indirect
+	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 )

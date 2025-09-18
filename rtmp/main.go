@@ -445,7 +445,7 @@ func extractStreamKey(payload []byte) (string, error) {
 
 func validateStreamKey(streamKey string) bool {
 	fmt.Printf("🔍 Validating stream key: %s\n", streamKey)
-	
+
 	// Check static stream keys first
 	if validStreamKeys[streamKey] {
 		fmt.Printf("✅ Valid static stream key: %s\n", streamKey)
@@ -458,11 +458,11 @@ func validateStreamKey(streamKey string) bool {
 		fmt.Printf("✅ Valid Nostr stream key: %s\n", streamKey)
 		return true
 	}
-	
+
 	fmt.Printf("❌ Invalid stream key: %s\n", streamKey)
 	fmt.Printf("Available static keys: %v\n", getStaticKeys())
 	fmt.Printf("Available Nostr keys: %d\n", len(nostrStreamKeys))
-	
+
 	return false
 }
 
@@ -805,10 +805,12 @@ func handleConn(conn net.Conn) {
 					return
 				}
 			case "publish":
+				fmt.Println("📡 Received publish command")
+
 				// Extract and validate stream key
 				streamKey, err := extractStreamKey(m.payload)
 				if err != nil {
-					fmt.Printf("Failed to extract stream key: %v\n", err)
+					fmt.Printf("❌ Failed to extract stream key: %v\n", err)
 					// Send error response
 					if err := writeAMF0Command(conn, defaultOutCsidCmd, streamID,
 						"onStatus", float64(0), nil,
@@ -824,9 +826,11 @@ func handleConn(conn net.Conn) {
 					continue
 				}
 
+				fmt.Printf("🔑 Extracted stream key: %s\n", streamKey)
+
 				// Validate stream key
 				if !validateStreamKey(streamKey) {
-					fmt.Printf("Invalid stream key: %s\n", streamKey)
+					fmt.Printf("❌ Invalid stream key: %s\n", streamKey)
 					// Send error response
 					if err := writeAMF0Command(conn, defaultOutCsidCmd, streamID,
 						"onStatus", float64(0), nil,
@@ -845,10 +849,12 @@ func handleConn(conn net.Conn) {
 				// Stream key is valid, send success response
 				if _, isNostr := streamKeyToPubkey[streamKey]; isNostr {
 					pubkey := streamKeyToPubkey[streamKey]
-					fmt.Printf("Valid Nostr stream key: %s (pubkey: %s)\n", streamKey, pubkey[:8]+"...")
+					fmt.Printf("✅ Valid Nostr stream key: %s (pubkey: %s)\n", streamKey, pubkey[:8]+"...")
 				} else {
-					fmt.Printf("Valid static stream key: %s\n", streamKey)
+					fmt.Printf("✅ Valid static stream key: %s\n", streamKey)
 				}
+
+				// Send success response
 				if err := writeAMF0Command(conn, defaultOutCsidCmd, streamID,
 					"onStatus", float64(0), nil,
 					[][2]amf0Val{
@@ -857,10 +863,10 @@ func handleConn(conn net.Conn) {
 						{"description", "Publish ok."},
 					},
 				); err != nil {
-					fmt.Println("write publish onStatus err:", err)
+					fmt.Println("❌ write publish onStatus err:", err)
 					return
 				}
-				fmt.Println("publish acknowledged")
+				fmt.Println("✅ Publish acknowledged - stream accepted")
 			default:
 				// ignore others (releaseStream, FCPublish, etc.)
 			}
@@ -915,6 +921,21 @@ func handleStreamKeyRegistration(w http.ResponseWriter, r *http.Request) {
 		"message":   "Stream key registered successfully",
 		"streamKey": req.StreamKey,
 	})
+}
+
+// HTTP handler for debugging stream keys
+func handleDebugStreamKeys(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	response := map[string]interface{}{
+		"staticKeys":        getStaticKeys(),
+		"nostrKeys":         len(nostrStreamKeys),
+		"nostrKeyMap":       nostrStreamKeys,
+		"streamKeyToPubkey": streamKeyToPubkey,
+		"totalValidKeys":    len(validStreamKeys),
+	}
+
+	json.NewEncoder(w).Encode(response)
 }
 
 // HTTP handler for Nostr authentication
@@ -1030,6 +1051,7 @@ func main() {
 	// Start HTTP server for Nostr authentication and stream key registration
 	http.HandleFunc("/auth/nostr", handleNostrAuth)
 	http.HandleFunc("/api/stream-key", handleStreamKeyRegistration)
+	http.HandleFunc("/debug/stream-keys", handleDebugStreamKeys)
 	go func() {
 		fmt.Println("HTTP server for Nostr auth and stream key registration listening on :8080")
 		if err := http.ListenAndServe(":8080", nil); err != nil {

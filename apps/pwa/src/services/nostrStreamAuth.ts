@@ -58,6 +58,7 @@ export function useCreateStreamAuthEvent() {
           ['t', 'obs'],
           ['t', 'rtmp'],
           ['expiration', (Math.floor(Date.now() / 1000) + 3600).toString()], // 1 hour expiration
+          ['d', streamId], // Add d-tag for uniqueness
         ];
 
         // Sign the event
