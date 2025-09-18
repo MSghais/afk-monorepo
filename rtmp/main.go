@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 	"unsafe"
+
+	"github.com/nbd-wtf/go-nostr"
 )
 
 const (
@@ -34,8 +36,8 @@ var validStreamKeys = map[string]bool{
 	"my_live_key": true,
 }
 
-// Nostr authentication structures
-type NostrEvent struct {
+// Nostr authentication structures (matching algo-relay format)
+type NostrAuthRequest struct {
 	ID        string     `json:"id"`
 	PubKey    string     `json:"pubkey"`
 	CreatedAt int64      `json:"created_at"`
@@ -43,10 +45,6 @@ type NostrEvent struct {
 	Tags      [][]string `json:"tags"`
 	Content   string     `json:"content"`
 	Sig       string     `json:"sig"`
-}
-
-type NostrAuthRequest struct {
-	Event NostrEvent `json:"event"`
 }
 
 type NostrAuthResponse struct {
@@ -378,17 +376,31 @@ func generateStreamKeyFromPubkey(pubkey string) string {
 	return hex.EncodeToString(hash[:])[:16] // Use first 16 characters
 }
 
-// verifyNostrSignature verifies a Nostr event signature (simplified version)
-func verifyNostrSignature(event *NostrEvent) bool {
-	// This is a simplified verification - in production you'd use proper secp256k1 verification
-	// For now, we'll just check that the signature is present and has the right format
-	if len(event.Sig) != 128 { // 64 bytes = 128 hex characters
-		return false
+// verifyNostrSignature verifies a Nostr event signature using proper nostr.Event
+func verifyNostrSignature(authReq *NostrAuthRequest) bool {
+	// Create nostr.Event from the request data (matching algo-relay approach)
+	nostrTags := nostr.Tags{}
+	for _, tag := range authReq.Tags {
+		nostrTags = append(nostrTags, nostr.Tag(tag))
 	}
 
-	// Check if signature is valid hex
-	_, err := hex.DecodeString(event.Sig)
-	return err == nil
+	event := &nostr.Event{
+		ID:        authReq.ID,
+		PubKey:    authReq.PubKey,
+		CreatedAt: nostr.Timestamp(authReq.CreatedAt),
+		Kind:      authReq.Kind,
+		Tags:      nostrTags,
+		Content:   authReq.Content,
+		Sig:       authReq.Sig,
+	}
+
+	// Verify the signature using the proper nostr method
+	ok, err := event.CheckSignature()
+	if err != nil {
+		fmt.Printf("Nostr signature verification error: %v\n", err)
+		return false
+	}
+	return ok
 }
 
 // authenticateWithNostr handles Nostr-based authentication
@@ -763,23 +775,21 @@ func handleNostrAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	event := &authReq.Event
-
-	// Verify signature
-	if !verifyNostrSignature(event) {
+	// Verify signature using proper nostr.Event verification
+	if !verifyNostrSignature(&authReq) {
 		sendNostrAuthResponse(w, false, "", "Invalid signature")
 		return
 	}
 
 	// Check if event is recent (within 5 minutes)
-	eventTime := time.Unix(event.CreatedAt, 0)
+	eventTime := time.Unix(authReq.CreatedAt, 0)
 	if time.Since(eventTime) > 5*time.Minute {
 		sendNostrAuthResponse(w, false, "", "Authentication event is too old")
 		return
 	}
 
 	// Generate stream key
-	streamKey, err := authenticateWithNostr(event.PubKey)
+	streamKey, err := authenticateWithNostr(authReq.PubKey)
 	if err != nil {
 		sendNostrAuthResponse(w, false, "", "Failed to generate stream key: "+err.Error())
 		return
