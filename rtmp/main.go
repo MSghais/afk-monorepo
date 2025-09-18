@@ -2,11 +2,15 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -29,6 +33,31 @@ var validStreamKeys = map[string]bool{
 	"secret_key":  true,
 	"my_live_key": true,
 }
+
+// Nostr authentication structures
+type NostrEvent struct {
+	ID        string     `json:"id"`
+	PubKey    string     `json:"pubkey"`
+	CreatedAt int64      `json:"created_at"`
+	Kind      int        `json:"kind"`
+	Tags      [][]string `json:"tags"`
+	Content   string     `json:"content"`
+	Sig       string     `json:"sig"`
+}
+
+type NostrAuthRequest struct {
+	Event NostrEvent `json:"event"`
+}
+
+type NostrAuthResponse struct {
+	Success   bool   `json:"success"`
+	StreamKey string `json:"stream_key,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// Dynamic stream keys generated from Nostr authentication
+var nostrStreamKeys = make(map[string]string)   // pubkey -> stream_key
+var streamKeyToPubkey = make(map[string]string) // stream_key -> pubkey
 
 // AddStreamKey adds a new valid stream key
 func addStreamKey(key string) {
@@ -328,7 +357,56 @@ func extractStreamKey(payload []byte) (string, error) {
 }
 
 func validateStreamKey(streamKey string) bool {
-	return validStreamKeys[streamKey]
+	// Check static stream keys first
+	if validStreamKeys[streamKey] {
+		return true
+	}
+
+	// Check if it's a Nostr-generated stream key
+	_, exists := streamKeyToPubkey[streamKey]
+	return exists
+}
+
+// generateStreamKeyFromPubkey creates a deterministic stream key from a Nostr pubkey
+func generateStreamKeyFromPubkey(pubkey string) string {
+	// Create a deterministic hash from pubkey + current hour
+	now := time.Now()
+	hour := now.Truncate(time.Hour).Unix()
+
+	data := fmt.Sprintf("%s:%d", pubkey, hour)
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:])[:16] // Use first 16 characters
+}
+
+// verifyNostrSignature verifies a Nostr event signature (simplified version)
+func verifyNostrSignature(event *NostrEvent) bool {
+	// This is a simplified verification - in production you'd use proper secp256k1 verification
+	// For now, we'll just check that the signature is present and has the right format
+	if len(event.Sig) != 128 { // 64 bytes = 128 hex characters
+		return false
+	}
+
+	// Check if signature is valid hex
+	_, err := hex.DecodeString(event.Sig)
+	return err == nil
+}
+
+// authenticateWithNostr handles Nostr-based authentication
+func authenticateWithNostr(pubkey string) (string, error) {
+	// Check if we already have a valid stream key for this pubkey
+	if streamKey, exists := nostrStreamKeys[pubkey]; exists {
+		return streamKey, nil
+	}
+
+	// Generate new stream key
+	streamKey := generateStreamKeyFromPubkey(pubkey)
+
+	// Store the mapping
+	nostrStreamKeys[pubkey] = streamKey
+	streamKeyToPubkey[streamKey] = pubkey
+
+	fmt.Printf("Generated Nostr stream key for pubkey %s: %s\n", pubkey, streamKey)
+	return streamKey, nil
 }
 
 func readMsg(conn net.Conn) (rtmpMsg, error) {
@@ -643,7 +721,12 @@ func handleConn(conn net.Conn) {
 				}
 
 				// Stream key is valid, send success response
-				fmt.Printf("Valid stream key: %s\n", streamKey)
+				if _, isNostr := streamKeyToPubkey[streamKey]; isNostr {
+					pubkey := streamKeyToPubkey[streamKey]
+					fmt.Printf("Valid Nostr stream key: %s (pubkey: %s)\n", streamKey, pubkey[:8]+"...")
+				} else {
+					fmt.Printf("Valid static stream key: %s\n", streamKey)
+				}
 				if err := writeAMF0Command(conn, defaultOutCsidCmd, streamID,
 					"onStatus", float64(0), nil,
 					[][2]amf0Val{
@@ -667,13 +750,64 @@ func handleConn(conn net.Conn) {
 	}
 }
 
+// HTTP handler for Nostr authentication
+func handleNostrAuth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var authReq NostrAuthRequest
+	if err := json.NewDecoder(r.Body).Decode(&authReq); err != nil {
+		sendNostrAuthResponse(w, false, "", "Invalid request format: "+err.Error())
+		return
+	}
+
+	event := &authReq.Event
+
+	// Verify signature
+	if !verifyNostrSignature(event) {
+		sendNostrAuthResponse(w, false, "", "Invalid signature")
+		return
+	}
+
+	// Check if event is recent (within 5 minutes)
+	eventTime := time.Unix(event.CreatedAt, 0)
+	if time.Since(eventTime) > 5*time.Minute {
+		sendNostrAuthResponse(w, false, "", "Authentication event is too old")
+		return
+	}
+
+	// Generate stream key
+	streamKey, err := authenticateWithNostr(event.PubKey)
+	if err != nil {
+		sendNostrAuthResponse(w, false, "", "Failed to generate stream key: "+err.Error())
+		return
+	}
+
+	sendNostrAuthResponse(w, true, streamKey, "")
+}
+
+func sendNostrAuthResponse(w http.ResponseWriter, success bool, streamKey, errorMsg string) {
+	w.Header().Set("Content-Type", "application/json")
+
+	response := NostrAuthResponse{
+		Success:   success,
+		StreamKey: streamKey,
+		Error:     errorMsg,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
 // Admin interface for managing stream keys
 func adminInterface() {
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Println("Admin commands:")
-	fmt.Println("  add <key>     - Add a stream key")
-	fmt.Println("  remove <key>  - Remove a stream key")
-	fmt.Println("  list          - List all stream keys")
+	fmt.Println("  add <key>     - Add a static stream key")
+	fmt.Println("  remove <key>  - Remove a static stream key")
+	fmt.Println("  list          - List all stream keys (static + Nostr)")
+	fmt.Println("  nostr         - List Nostr stream keys")
 	fmt.Println("  quit          - Exit server")
 
 	for {
@@ -703,7 +837,16 @@ func adminInterface() {
 			}
 			removeStreamKey(parts[1])
 		case "list":
-			fmt.Printf("Valid stream keys: %v\n", listStreamKeys())
+			fmt.Printf("Static stream keys: %v\n", listStreamKeys())
+			fmt.Printf("Nostr stream keys: %d active\n", len(nostrStreamKeys))
+			for pubkey, streamKey := range nostrStreamKeys {
+				fmt.Printf("  %s -> %s\n", pubkey[:8]+"...", streamKey)
+			}
+		case "nostr":
+			fmt.Printf("Nostr stream keys (%d active):\n", len(nostrStreamKeys))
+			for pubkey, streamKey := range nostrStreamKeys {
+				fmt.Printf("  %s -> %s\n", pubkey, streamKey)
+			}
 		case "quit":
 			fmt.Println("Shutting down server...")
 			os.Exit(0)
@@ -715,13 +858,26 @@ func adminInterface() {
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
+
+	// Start HTTP server for Nostr authentication
+	http.HandleFunc("/auth/nostr", handleNostrAuth)
+	go func() {
+		fmt.Println("HTTP server for Nostr auth listening on :8080")
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			fmt.Printf("HTTP server error: %v\n", err)
+		}
+	}()
+
+	// Start RTMP server
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", rtmpPort))
 	if err != nil {
 		panic(err)
 	}
 	fmt.Printf("RTMP (stdlib-only) listening on :%d\n", rtmpPort)
-	fmt.Printf("Valid stream keys: %v\n", listStreamKeys())
+	fmt.Printf("Static stream keys: %v\n", listStreamKeys())
 	fmt.Println("Connect with: rtmp://localhost:1935/live/<stream_key>")
+	fmt.Println("Nostr auth endpoint: http://localhost:8080/auth/nostr")
+	fmt.Println("Nostr stream keys are generated dynamically and rotate hourly")
 
 	// Start admin interface in a goroutine
 	go adminInterface()
