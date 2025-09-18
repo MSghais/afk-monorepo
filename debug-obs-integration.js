@@ -149,6 +149,7 @@ async function testStreamKeyValidation(streamKey) {
       const result = await response.json();
       console.log('✅ Stream key validation successful');
       console.log('   Generated Key:', result.stream_key);
+      console.log('   Success:', result.success);
       console.log('   Matches expected:', result.stream_key === streamKey);
       return result.stream_key === streamKey;
     } else {
