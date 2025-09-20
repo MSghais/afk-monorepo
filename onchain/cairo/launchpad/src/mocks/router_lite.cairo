@@ -48,9 +48,10 @@ pub mod RouterLite {
     use core::option::OptionTrait;
     use ekubo::components::clear::ClearImpl;
     use ekubo::components::shared_locker::{
-        call_core_with_callback, consume_callback_data, handle_delta,
+        call_core_with_callback, consume_callback_data, handle_delta, 
+        forward_lock
     };
-    use ekubo::interfaces::core::{ICoreDispatcher, ICoreDispatcherTrait, ILocker, SwapParameters};
+    use ekubo::interfaces::core::{ICoreDispatcher, ICoreDispatcherTrait, ILocker, SwapParameters, IForwardeeDispatcher};
     use starknet::get_contract_address;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use super::{Delta, IRouterLite, RouteNode, Swap, TokenAmount};
@@ -81,6 +82,9 @@ pub mod RouterLite {
                 let mut token_amount = swap.token_amount;
 
                 let mut deltas: Array<Delta> = ArrayTrait::new();
+
+                      
+            
                 // we track this to know how much to pay in the case of exact input and how much to
                 // pull in the case of exact output
                 let mut first_swap_amount: Option<TokenAmount> = Option::None;
@@ -100,6 +104,22 @@ pub mod RouterLite {
                         );
 
                     deltas.append(delta);
+
+                    println!("forward to InternalSwapPool extension");
+                    let extension_address = node.pool_key.extension;
+                    println!("node.pool_key.extension: {:?}", extension_address);
+
+
+                    // TODO: Fix this
+                    // WARNING
+                    // Forward to InternalSwapPool extension and get result
+                    // let isp_delta: Delta = forward_lock(
+                    //     core,
+                    //     IForwardeeDispatcher { contract_address: extension_address },
+                    //     @deltas
+                    // );
+
+                    // deltas.append(isp_delta);
 
                     if first_swap_amount.is_none() {
                         first_swap_amount =
@@ -124,6 +144,8 @@ pub mod RouterLite {
                         } else {
                             TokenAmount { amount: -delta.amount1, token: node.pool_key.token1 }
                         };
+
+              
                 }
 
                 let recipient = get_contract_address();
@@ -131,6 +153,8 @@ pub mod RouterLite {
                 outputs.append(deltas);
 
                 let first = first_swap_amount.unwrap();
+
+
                 handle_delta(core, token_amount.token, -token_amount.amount, recipient);
                 handle_delta(core, first.token, first.amount, recipient);
             }

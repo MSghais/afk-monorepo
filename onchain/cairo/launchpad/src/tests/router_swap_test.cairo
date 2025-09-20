@@ -10,7 +10,7 @@ use starknet::{ContractAddress, get_contract_address, contract_address_const, ge
 use afk_launchpad::mocks::router_lite::{
     IRouterLiteDispatcher, IRouterLiteDispatcherTrait,IRouterLite
 };
-use afk_launchpad::launchpad::extensions::internal_swap_pool::{InternalSwapPool,IISPDispatcher, IISPDispatcherTrait, Swap
+use afk_launchpad::launchpad::extensions::internal_swap_pool::{InternalSwapPool, Swap
 // InternalSwapPoolDispatcher, InternalSwapPoolDispatcherTrait,
 };
 use ekubo::types::keys::{PoolKey};

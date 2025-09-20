@@ -11,20 +11,20 @@ use ekubo::interfaces::router::{
     Depth, IRouterDispatcher, IRouterDispatcherTrait, RouteNode, TokenAmount
 };
 #[starknet::interface]
-pub trait IISP<TState> {
+pub trait IInternalSwapPool<TContractState> {
     fn initialize(
-        ref self: TState,
+        ref self: TContractState,
         native_token: ContractAddress,
         creator: ContractAddress,
         core: ICoreDispatcher,
         fee_percentage_creator: u128,
     );
-    fn can_use_prefill(self: @TState, pool_key: PoolKey, params: SwapParameters) -> bool;
-    fn accumulate_fees(ref self: TState, pool_key: PoolKey, token: ContractAddress, amount: u128);
-    fn get_native_token(self: @TState) -> ContractAddress;
-    fn calc_fee(ref self: TState, amount: u128) -> u128;
-    fn calc_total_fee(ref self: TState, amount: u128) -> u128;
-    fn split_fees(ref self: TState, total_fee: u128) -> (u128, u128);
+    fn can_use_prefill(self: @TContractState, pool_key: PoolKey, params: SwapParameters) -> bool;
+    fn accumulate_fees(ref self: TContractState, pool_key: PoolKey, token: ContractAddress, amount: u128);
+    fn get_native_token(self: @TContractState) -> ContractAddress;
+    fn calc_fee(ref self: TContractState, amount: u128) -> u128;
+    fn calc_total_fee(ref self: TContractState, amount: u128) -> u128;
+    fn split_fees(ref self: TContractState, total_fee: u128) -> (u128, u128);
 }
 
 
@@ -58,6 +58,13 @@ pub trait IISPRouter<TContractState> {
     fn swap(ref self: TContractState, swap_data: Swap) -> Delta;
 }
 
+// #[starknet::interface]
+// pub trait IInternalSwapPool<TContractState> {
+//     // Get fees data
+//     fn get_fees_data(ref self: TContractState, swap_data: Swap) -> Delta;
+// }
+
+
 #[starknet::contract]
 pub mod InternalSwapPool {
     use core::array::ArrayTrait;
@@ -77,7 +84,9 @@ pub mod InternalSwapPool {
     use ekubo::types::keys::{PoolKey, SavedBalanceKey};
     use starknet::storage::*;
     use starknet::{ContractAddress, get_contract_address};
-    use super::{IISP, Swap};
+    use super::{IInternalSwapPool, Swap, 
+        // IInternalSwapPool
+    };
 
     #[abi(embed_v0)]
     impl Clear = ekubo::components::clear::ClearImpl<ContractState>;
@@ -179,6 +188,17 @@ pub mod InternalSwapPool {
         pub total_output: u128,
     }
 
+
+    #[derive(Drop, starknet::Event)]
+    pub struct FeesProcessed {
+        #[key]
+        pub pool_key: PoolKey,
+        #[key]
+        pub user: ContractAddress,
+        pub fee_creator: u128,
+        pub fee_protocol: u128,
+    }
+
     #[derive(starknet::Event, Drop)]
     #[event]
     enum Event {
@@ -193,7 +213,7 @@ pub mod InternalSwapPool {
     #[abi(embed_v0)]
     impl InternalSwapPoolHasInterface of IHasInterface<ContractState> {
         fn get_primary_interface_id(self: @ContractState) -> felt252 {
-            selector!("afk_launchpad::launchpad::extensions::internal_swap_pool")
+            selector!("afk_launchpad::launchpad::extensions::InternalSwapPool")
         }
     }
 
@@ -212,6 +232,7 @@ pub mod InternalSwapPool {
             pool_key: PoolKey,
             params: SwapParameters,
         ) {
+            println!("before_swap");
             // call_core_with_callback::<(PoolKey, u128), ()>(self.core.read(), @(pool_key, params.skip_ahead));
             // panic!("Only from internal_swap_pool");
         }
@@ -257,6 +278,39 @@ pub mod InternalSwapPool {
     // impl LockedImpl of ILocker<ContractState> {
     //     fn locked(ref self: ContractState, id: u32, data: Span<felt252>) -> Span<felt252> {
     //         let core = self.core.read();
+    //         println!("locked");
+    //         let (pool_key, skip_ahead) = consume_callback_data::<(PoolKey, u128)>(core, data);
+
+    //         let tick_before_swap = core.get_pool_price(pool_key).tick;
+
+    //         println!("tick_before_swap: {:?}", tick_before_swap);
+    //         // let mut swap_data: Swap = consume_callback_data(core, data);
+    //         // println!("swap_data: {:?}", swap_data.token_amount.amount);
+    //         println!("consume_callback_data::<Swap>");
+    //         let i = 0;
+    //         // let token = swap_data.token_amount.token;
+    //         // println!("token: {:?}", token);
+    //         // let token1 = swap_data.route[i].pool_key.token1;
+    //         // let is_token1 = *token1 == token;
+
+    //         // let pool_key = swap_data.route[i].pool_key;
+
+    //         // let skip_ahead = swap_data.route[i].skip_ahead;
+    //         // let sqrt_ratio_limit = swap_data.route[i].sqrt_ratio_limit;
+
+    //         // println!("is_token1: {:?}", is_token1);
+    //         // // println!("pool_key: {:?}", pool_key);
+    //         // println!("sqrt_ratio_limit: {:?}", sqrt_ratio_limit);
+
+    //         array![].span()
+    //     }
+    // }
+
+
+    // #[abi(embed_v0)]
+    // impl LockedImpl of ILocker<ContractState> {
+    //     fn locked(ref self: ContractState, id: u32, data: Span<felt252>) -> Span<felt252> {
+    //         let core = self.core.read();
     //         let (pool_key, skip_ahead) = consume_callback_data::<(PoolKey, u128)>(core, data);
 
     //         array![].span()
@@ -271,11 +325,14 @@ pub mod InternalSwapPool {
         fn forwarded(
             ref self: ContractState, original_locker: ContractAddress, id: u32, data: Span<felt252>,
         ) -> Span<felt252> {
+            println!("forwarded");
+
             let core = self.core.read();
 
-            println!("forwarded");
             // Consume the callback data from router
-            let mut swap_data: Swap = consume_callback_data(core, data);
+            let mut swap_data: Swap = consume_callback_data::<Swap>(core, data);
+            // let mut swaps = consume_callback_data::<Array<Swap>>(core, data);
+            
 
             // Determine if it is token1
 
@@ -307,12 +364,18 @@ pub mod InternalSwapPool {
             let mut new_delta = result;
             println!("swap done");
 
+
+            let mut total_fee = 0;
+            let mut creator_fee = 0;
+            let mut protocol_fee = 0;
             if result.amount0.sign {
                 // Token0 negative: take fee from amount0
 
-                let total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount0.mag);
-                let (creator_fee, protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
+                total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount0.mag);
+                let (_creator_fee, _protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
                 
+                creator_fee = _creator_fee;
+                protocol_fee = _protocol_fee;
                 // Send creator fee to creator address
                 if creator_fee > 0 {
                     let creator_key = SavedBalanceKey {
@@ -346,11 +409,12 @@ pub mod InternalSwapPool {
 
             } else if result.amount1.sign {
                 // Token1 negative: take fee from amount1
-          
-
-                let total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount1.mag);
-                let (creator_fee, protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
+                total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount1.mag);
+                let (_creator_fee, _protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
                 
+                creator_fee = _creator_fee;
+                protocol_fee = _protocol_fee;
+                // Send creator fee to creator addr
                 // Send creator fee to creator address
                 if creator_fee > 0 {
                     let creator_key = SavedBalanceKey {
@@ -396,7 +460,7 @@ pub mod InternalSwapPool {
 
     // Public interface for ISP functionality
     #[abi(embed_v0)]
-    impl InternalSwapPoolImpl of IISP<ContractState> {
+    impl InternalSwapPoolImpl of IInternalSwapPool<ContractState> {
         fn initialize(
             ref self: ContractState,
             native_token: ContractAddress,
@@ -405,6 +469,9 @@ pub mod InternalSwapPool {
             fee_percentage_creator: u128,
         ) {// Already initialized in constructor
         }
+
+     
+
 
         fn can_use_prefill(
             self: @ContractState, pool_key: PoolKey, params: SwapParameters,
