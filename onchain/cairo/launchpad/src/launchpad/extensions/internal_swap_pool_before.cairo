@@ -66,7 +66,7 @@ pub trait IISPRouter<TContractState> {
 
 
 #[starknet::contract]
-pub mod InternalSwapPool {
+pub mod InternalSwapPoolBefore {
     use core::array::ArrayTrait;
     use core::serde::Serde;
     use ekubo::components::clear::ClearImpl;
@@ -129,7 +129,6 @@ pub mod InternalSwapPool {
 
         router_address: ContractAddress,
 
-
     }
 
     #[constructor]
@@ -170,7 +169,7 @@ pub mod InternalSwapPool {
                     before_initialize_pool: false,
                     after_initialize_pool: false,
                     before_swap: true,
-                    after_swap: true,
+                    after_swap: false,
                     before_update_position: false,
                     after_update_position: false,
                     before_collect_fees: false,
@@ -204,7 +203,6 @@ pub mod InternalSwapPool {
     #[event]
     enum Event {
         SwapProcessed: SwapProcessed,
-        FeesProcessed:FeesProcessed,
         #[flat]
         UpgradeableEvent: upgradeable_component::Event,
         #[flat]
@@ -237,7 +235,7 @@ pub mod InternalSwapPool {
             println!("before_swap");
             // let mut swaps = consume_callback_data::<Array<Swap>>(self.core.read(), @(pool_key, params.skip_ahead));
 
-            // call_core_with_callback::<(PoolKey, u128, SwapParameters), ()>(self.core.read(), @(pool_key, params.skip_ahead, params));
+            call_core_with_callback::<(PoolKey, u128, SwapParameters), ()>(self.core.read(), @(pool_key, params.skip_ahead, params));
             // panic!("Only from internal_swap_pool");
         }
         fn after_swap(
@@ -246,12 +244,7 @@ pub mod InternalSwapPool {
             pool_key: PoolKey,
             params: SwapParameters,
             delta: Delta,
-        ) {
-            println!("after_swap");
-
-            call_core_with_callback::<(PoolKey, u128, SwapParameters, Delta), ()>(self.core.read(), @(pool_key, params.skip_ahead, params, delta));
-
-        }
+        ) {}
         fn before_update_position(
             ref self: ContractState,
             caller: ContractAddress,
@@ -288,7 +281,7 @@ pub mod InternalSwapPool {
         fn locked(ref self: ContractState, id: u32, data: Span<felt252>) -> Span<felt252> {
             let core = self.core.read();
             println!("locked");
-            let (pool_key, skip_ahead, params, delta) = consume_callback_data::<(PoolKey, u128, SwapParameters, Delta)>(core, data);
+            let (pool_key, skip_ahead, params) = consume_callback_data::<(PoolKey, u128, SwapParameters)>(core, data);
 
             let tick_before_swap = core.get_pool_price(pool_key).tick;
 
@@ -315,121 +308,13 @@ pub mod InternalSwapPool {
             println!("amount: {:?}", amount);
             println!("is_token1: {:?}", is_token1);
 
-            println!("delta amount0: {:?}", delta.amount0.mag);
-            println!("delta amount1: {:?}", delta.amount1.mag);
-
-            let mut new_delta = delta;
-            println!("swap done");
-
-            let mut total_fee = 0;
-            let mut creator_fee = 0;
-            let mut protocol_fee = 0;
-             
-            if delta.amount0.sign {
-                println!("Token0 negative: take fee from amount0");
-                // Token0 negative: take fee from amount0
-
-                total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount0.mag);
-                println!("total_fee: {:?}", total_fee);
-                let (_creator_fee, _protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
-                println!("creator_fee: {:?}", _creator_fee);
-                println!("protocol_fee: {:?}", _protocol_fee);
-                creator_fee = _creator_fee;
-                protocol_fee = _protocol_fee;
-                // Send creator fee to creator address
-                if creator_fee > 0 {
-                    println!("send creator fee to creator address");
-                    let creator_key = SavedBalanceKey {
-                        owner: self.creator.read(), 
-                        token: pool_key.token0, 
-                        salt: 0,
-                    };
-                    core.save(creator_key, creator_fee);
-                }
-                
-                // Send protocol fee to protocol address
-                if protocol_fee > 0 {
-                    println!("send protocol fee to protocol address");
-                    let protocol_key = SavedBalanceKey {
-                        owner: self.protocol_address.read(), 
-                        token: pool_key.token0, 
-                        salt: 0,
-                    };
-                    core.save(protocol_key, protocol_fee);
-                }
-                
-                new_delta.amount0.mag = delta.amount0.mag - total_fee;
-
-                // let fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount0.mag);
-                // // Credit fee to internal swap pool owner
-                // let owner = self.owned.get_owner();
-                // let key = SavedBalanceKey {
-                //     owner, token: swap_data.route.pool_key.token0, salt: 0,
-                // };
-                // core.save(key, fee);
-                // new_delta.amount0.mag = result.amount0.mag - fee;
-
-            } else if delta.amount1.sign {
-                println!("Token1 negative: take fee from amount1");
-
-                // Token1 negative: take fee from amount1
-                total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount1.mag);
-                println!("total_fee: {:?}", total_fee);
-                let (_creator_fee, _protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
-                println!("creator_fee: {:?}", _creator_fee);
-                println!("protocol_fee: {:?}", _protocol_fee);
-                creator_fee = _creator_fee;
-                protocol_fee = _protocol_fee;
-                // Send creator fee to creator addr
-                // Send creator fee to creator address
-                if creator_fee > 0 {
-                    println!("send creator fee to creator address");
-                    let creator_key = SavedBalanceKey {
-                        owner: self.creator.read(), 
-                        token: pool_key.token1, 
-                        salt: 1,
-                    };
-                    core.save(creator_key, creator_fee);
-                }
-                
-                // Send protocol fee to protocol address
-                if protocol_fee > 0 {
-                    println!("send protocol fee to protocol address");
-                    let protocol_key = SavedBalanceKey {
-                        owner: self.protocol_address.read(), 
-                        token: pool_key.token1, 
-                        salt: 1,
-                    };
-                    core.save(protocol_key, protocol_fee);
-                }
-                
-                new_delta.amount1.mag = delta.amount1.mag - total_fee;
-                
-                // let fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount1.mag);
-                // // Save fee for amount1
-                // let key = SavedBalanceKey {
-                //     owner: get_contract_address(), token: swap_data.route.pool_key.token1, salt: 1,
-                // };
-                // core.save(key, fee);
-                // // Load the saved balance
-                // core.load(key.token, key.salt, fee);
-                // // Accumulate as protocol fees using ekubo core
-                // core.accumulate_as_fees(swap_data.route.pool_key, 0, fee);
-                // new_delta.amount1.mag = result.amount1.mag - fee;
-
-            }
-
-
             // let mut swaps = consume_callback_data::<Array<Swap>>(core, data);
             // let mut swaps:Array<Swap> = consume_callback_data(core, data);
 
             // println!("is_token1: {:?}", is_token1);
             // // println!("pool_key: {:?}", pool_key);
             // println!("sqrt_ratio_limit: {:?}", sqrt_ratio_limit);
-          // Serialize and return the modified delta
-            // let mut result_data = array![];
-            // Serde::serialize(@new_delta, ref result_data);
-            // result_data.span()
+
             array![].span()
         }
     }
@@ -597,6 +482,8 @@ pub mod InternalSwapPool {
             fee_percentage_creator: u128,
         ) {// Already initialized in constructor
         }
+
+     
 
 
         fn can_use_prefill(

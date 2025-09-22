@@ -82,8 +82,6 @@ pub mod RouterLite {
                 let mut token_amount = swap.token_amount;
 
                 let mut deltas: Array<Delta> = ArrayTrait::new();
-
-                      
             
                 // we track this to know how much to pay in the case of exact input and how much to
                 // pull in the case of exact output
@@ -110,9 +108,9 @@ pub mod RouterLite {
                     println!("node.pool_key.extension: {:?}", extension_address);
 
 
-                    // TODO: Fix this
-                    // WARNING
-                    // Forward to InternalSwapPool extension and get result
+                    // // TODO: Fix this
+                    // // WARNING
+                    // // Forward to InternalSwapPool extension and get result
                     // let isp_delta: Delta = forward_lock(
                     //     core,
                     //     IForwardeeDispatcher { contract_address: extension_address },
