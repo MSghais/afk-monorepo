@@ -103,20 +103,11 @@ pub mod RouterLite {
 
                     deltas.append(delta);
 
-                    println!("forward to InternalSwapPool extension");
-                    let extension_address = node.pool_key.extension;
-                    println!("node.pool_key.extension: {:?}", extension_address);
-
 
                     // // TODO: Fix this
                     // // WARNING
                     // // Forward to InternalSwapPool extension and get result
-                    // let isp_delta: Delta = forward_lock(
-                    //     core,
-                    //     IForwardeeDispatcher { contract_address: extension_address },
-                    //     @deltas
-                    // );
-
+        
                     // deltas.append(isp_delta);
 
                     if first_swap_amount.is_none() {
@@ -142,6 +133,16 @@ pub mod RouterLite {
                         } else {
                             TokenAmount { amount: -delta.amount1, token: node.pool_key.token1 }
                         };
+                
+                    println!("forward to InternalSwapPool extension");
+                    let extension_address = node.pool_key.extension;
+                    println!("node.pool_key.extension: {:?}", extension_address);
+
+                    // let isp_delta: Delta = forward_lock(
+                    //             core,
+                    //             IForwardeeDispatcher { contract_address: extension_address },
+                    //             @deltas
+                    //         );
 
               
                 }

@@ -428,16 +428,7 @@ pub mod InternalSwapPool {
                 //     };
                 //     core.save(input_key, paid_amount1);
                 // }
-                let total_less_fee = delta.amount1.mag - total_fee;
-                // if total_less_fee > 0 {
-                //     let input_key = SavedBalanceKey {
-                //         owner: caller,
-                //         token: pool_key.token1,
-                //         salt: 1,
-                //     };
-                //     core.save(input_key, total_less_fee);
-                // }
-                new_delta.amount1.mag = total_less_fee;
+                new_delta.amount0.mag = delta.amount0.mag - total_fee;
 
                 // new_delta.amount0.mag = 0;
                 // new_delta.amount1.mag = 0;
@@ -456,12 +447,24 @@ pub mod InternalSwapPool {
             // // println!("pool_key: {:?}", pool_key);
             // println!("sqrt_ratio_limit: {:?}", sqrt_ratio_limit);
           // Serialize and return the modified delta
-            let mut result_data = array![];
-            Serde::serialize(@new_delta, ref result_data);
-            result_data.span()
-            // array![].span()
+            // let mut result_data = array![];
+            // Serde::serialize(@new_delta, ref result_data);
+            // result_data.span()
+            array![].span()
         }
     }
+
+
+    // #[abi(embed_v0)]
+    // impl LockedImpl of ILocker<ContractState> {
+    //     fn locked(ref self: ContractState, id: u32, data: Span<felt252>) -> Span<felt252> {
+    //         let core = self.core.read();
+    //         let (pool_key, skip_ahead) = consume_callback_data::<(PoolKey, u128)>(core, data);
+
+    //         array![].span()
+    //     }
+    // }
+
 
 
     // Core ISP logic - handles forwarded calls from router
