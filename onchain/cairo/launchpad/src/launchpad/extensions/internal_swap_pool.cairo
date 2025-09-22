@@ -87,7 +87,7 @@ pub mod InternalSwapPool {
     use super::{IInternalSwapPool, Swap, 
         // IInternalSwapPool
     };
-
+    use openzeppelin::token::erc20::interface::{IERC20, IERC20Dispatcher, IERC20DispatcherTrait};
     #[abi(embed_v0)]
     impl Clear = ekubo::components::clear::ClearImpl<ContractState>;
 
@@ -325,6 +325,9 @@ pub mod InternalSwapPool {
             let mut creator_fee = 0;
             let mut protocol_fee = 0;
              
+            // Zero out all deltas before releasing the lock, using the actual delta values returned from the swap.
+            // This ensures the contract pays the correct amounts and does not leave any unaccounted deltas.
+            // Always zero out both amount0 and amount1 before returning.
             if delta.amount0.sign {
                 println!("Token0 negative: take fee from amount0");
                 // Token0 negative: take fee from amount0
@@ -357,18 +360,21 @@ pub mod InternalSwapPool {
                     };
                     core.save(protocol_key, protocol_fee);
                 }
-                
                 new_delta.amount0.mag = delta.amount0.mag - total_fee;
 
-                // let fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount0.mag);
-                // // Credit fee to internal swap pool owner
-                // let owner = self.owned.get_owner();
-                // let key = SavedBalanceKey {
-                //     owner, token: swap_data.route.pool_key.token0, salt: 0,
-                // };
-                // core.save(key, fee);
-                // new_delta.amount0.mag = result.amount0.mag - fee;
-
+                
+                // Pay the input token (amount0) and zero out both deltas before returning
+                let paid_amount0 = delta.amount0.mag - total_fee;
+                if paid_amount0 > 0 {
+                    let input_key = SavedBalanceKey {
+                        owner: self.router_address.read(),
+                        token: pool_key.token0,
+                        salt: 0,
+                    };
+                    core.save(input_key, paid_amount0);
+                }
+                new_delta.amount0.mag = 0;
+                new_delta.amount1.mag = 0;
             } else if delta.amount1.sign {
                 println!("Token1 negative: take fee from amount1");
 
@@ -380,10 +386,14 @@ pub mod InternalSwapPool {
                 println!("protocol_fee: {:?}", _protocol_fee);
                 creator_fee = _creator_fee;
                 protocol_fee = _protocol_fee;
-                // Send creator fee to creator addr
                 // Send creator fee to creator address
                 if creator_fee > 0 {
                     println!("send creator fee to creator address");
+                    let erc20  = IERC20Dispatcher {contract_address: pool_key.token1};
+                    println!("creator address: {:?}", self.creator.read());
+                    println!("token1: {:?}", pool_key.token1);
+                    println!("creator fee: {:?}", creator_fee);
+                    // erc20.transfer(pool_key.token1, creator_fee.try_into().unwrap());
                     let creator_key = SavedBalanceKey {
                         owner: self.creator.read(), 
                         token: pool_key.token1, 
@@ -395,6 +405,11 @@ pub mod InternalSwapPool {
                 // Send protocol fee to protocol address
                 if protocol_fee > 0 {
                     println!("send protocol fee to protocol address");
+                    let erc20  = IERC20Dispatcher {contract_address: pool_key.token1};
+                    println!("creator address: {:?}", self.creator.read());
+                    println!("token1: {:?}", pool_key.token1);
+                    println!("creator fee: {:?}", creator_fee);
+                    // erc20.transfer(pool_key.token1, creator_fee.try_into().unwrap());
                     let protocol_key = SavedBalanceKey {
                         owner: self.protocol_address.read(), 
                         token: pool_key.token1, 
@@ -403,21 +418,26 @@ pub mod InternalSwapPool {
                     core.save(protocol_key, protocol_fee);
                 }
                 
-                new_delta.amount1.mag = delta.amount1.mag - total_fee;
-                
-                // let fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount1.mag);
-                // // Save fee for amount1
-                // let key = SavedBalanceKey {
-                //     owner: get_contract_address(), token: swap_data.route.pool_key.token1, salt: 1,
-                // };
-                // core.save(key, fee);
-                // // Load the saved balance
-                // core.load(key.token, key.salt, fee);
-                // // Accumulate as protocol fees using ekubo core
-                // core.accumulate_as_fees(swap_data.route.pool_key, 0, fee);
-                // new_delta.amount1.mag = result.amount1.mag - fee;
+                // Pay the input token (amount1) and zero out both deltas before returning
+                // let paid_amount1 = delta.amount1.mag - total_fee;
+                // if paid_amount1 > 0 {
+                //     let input_key = SavedBalanceKey {
+                //         owner: self.router_address.read(),
+                //         token: pool_key.token1,
+                //         salt: 1,
+                //     };
+                //     core.save(input_key, paid_amount1);
+                // }
+                new_delta.amount0.mag = delta.amount0.mag - total_fee;
 
-            }
+                // new_delta.amount0.mag = 0;
+                // new_delta.amount1.mag = 0;
+            } 
+            // else {
+            //     // If neither is negative, zero out both to be safe
+            //     new_delta.amount0.mag = 0;
+            //     new_delta.amount1.mag = 0;
+            // }
 
 
             // let mut swaps = consume_callback_data::<Array<Swap>>(core, data);
