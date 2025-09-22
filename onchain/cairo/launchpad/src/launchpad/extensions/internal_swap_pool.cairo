@@ -290,58 +290,18 @@ pub mod InternalSwapPool {
             println!("locked");
             let (caller, pool_key, skip_ahead, params, delta) = consume_callback_data::<(ContractAddress, PoolKey, u128, SwapParameters, Delta)>(core, data);
 
-            let tick_before_swap = core.get_pool_price(pool_key).tick;
+            let tick_after_swap = core.get_pool_price(pool_key).tick;
+            println!("tick_after_swap: {:?}", tick_after_swap);
 
-            println!("tick_before_swap: {:?}", tick_before_swap);
-            // let mut swap_data: Swap = consume_callback_data(core, data);
-            // println!("swap_data: {:?}", swap_data.token_amount.amount);
-            let i = 0;
-            // let token = swap_data.token_amount.token;
-            // println!("token: {:?}", token);
-            // let token1 = swap_data.route[i].pool_key.token1;
-            // let is_token1 = *token1 == token;
-
-            // let pool_key = swap_data.route[i].pool_key;
-
-            // let skip_ahead = swap_data.route[i].skip_ahead;
-            // let sqrt_ratio_limit = swap_data.route[i].sqrt_ratio_limit;
-
-            let skip_ahead = params.skip_ahead;
-            let sqrt_ratio_limit = params.sqrt_ratio_limit;
-            let amount = params.amount;
-            let is_token1 = params.is_token1;
-            println!("skip_ahead: {:?}", skip_ahead);
-            println!("sqrt_ratio_limit: {:?}", sqrt_ratio_limit);
-            println!("amount: {:?}", amount);
-            println!("is_token1: {:?}", is_token1);
-
-            println!("delta amount0: {:?}", delta.amount0.mag);
-            println!("delta amount1: {:?}", delta.amount1.mag);
-
-            let mut new_delta = delta;
-            println!("swap done");
-
-            let mut total_fee = 0;
-            let mut creator_fee = 0;
-            let mut protocol_fee = 0;
-             
-            // Zero out all deltas before releasing the lock, using the actual delta values returned from the swap.
-            // This ensures the contract pays the correct amounts and does not leave any unaccounted deltas.
-            // Always zero out both amount0 and amount1 before returning.
+            // Process fees using core.save() - following the limit orders pattern
+            // This is the correct way to handle fees in Ekubo extensions
             if delta.amount0.sign {
-                println!("Token0 negative: take fee from amount0");
-                // Token0 negative: take fee from amount0
-
-                total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount0.mag);
-                println!("total_fee: {:?}", total_fee);
-                let (_creator_fee, _protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
-                println!("creator_fee: {:?}", _creator_fee);
-                println!("protocol_fee: {:?}", _protocol_fee);
-                creator_fee = _creator_fee;
-                protocol_fee = _protocol_fee;
+                println!("Token0 negative: processing fees for amount0");
+                let total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount0.mag);
+                let (creator_fee, protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
+                
                 // Send creator fee to creator address
                 if creator_fee > 0 {
-                    println!("send creator fee to creator address");
                     let creator_key = SavedBalanceKey {
                         owner: self.creator.read(), 
                         token: pool_key.token0, 
@@ -352,7 +312,6 @@ pub mod InternalSwapPool {
                 
                 // Send protocol fee to protocol address
                 if protocol_fee > 0 {
-                    println!("send protocol fee to protocol address");
                     let protocol_key = SavedBalanceKey {
                         owner: self.protocol_address.read(), 
                         token: pool_key.token0, 
@@ -360,106 +319,63 @@ pub mod InternalSwapPool {
                     };
                     core.save(protocol_key, protocol_fee);
                 }
-                new_delta.amount0.mag = delta.amount0.mag - total_fee;
-
                 
-                // Pay the input token (amount0) and zero out both deltas before returning
-                let paid_amount0 = delta.amount0.mag - total_fee;
-                if paid_amount0 > 0 {
+                // Pay the remaining amount to router
+                let remaining_amount = delta.amount0.mag - total_fee;
+                if remaining_amount > 0 {
                     let input_key = SavedBalanceKey {
                         owner: self.router_address.read(),
                         token: pool_key.token0,
                         salt: 0,
                     };
-                    core.save(input_key, paid_amount0);
+                    core.save(input_key, remaining_amount);
                 }
-                new_delta.amount0.mag = 0;
-                new_delta.amount1.mag = 0;
             } else if delta.amount1.sign {
-                println!("Token1 negative: take fee from amount1");
-
-                // Token1 negative: take fee from amount1
-                total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount1.mag);
-                println!("total_fee: {:?}", total_fee);
-                let (_creator_fee, _protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
-                println!("creator_fee: {:?}", _creator_fee);
-                println!("protocol_fee: {:?}", _protocol_fee);
-                creator_fee = _creator_fee;
-                protocol_fee = _protocol_fee;
+                println!("Token1 negative: processing fees for amount1");
+                let total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount1.mag);
+                let (creator_fee, protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
+                
                 // Send creator fee to creator address
                 if creator_fee > 0 {
-                    println!("send creator fee to creator address");
-                    let erc20  = IERC20Dispatcher {contract_address: pool_key.token1};
-                    println!("creator address: {:?}", self.creator.read());
-                    println!("token1: {:?}", pool_key.token1);
-                    println!("creator fee: {:?}", creator_fee);
-                    // erc20.transfer(pool_key.token1, creator_fee.try_into().unwrap());
                     let creator_key = SavedBalanceKey {
                         owner: self.creator.read(), 
                         token: pool_key.token1, 
                         salt: 1,
                     };
                     core.save(creator_key, creator_fee);
+                    // core.load(creator_key.token, creator_key.salt, creator_fee);
+
                 }
                 
                 // Send protocol fee to protocol address
                 if protocol_fee > 0 {
-                    println!("send protocol fee to protocol address");
-                    let erc20  = IERC20Dispatcher {contract_address: pool_key.token1};
-                    println!("creator address: {:?}", self.creator.read());
-                    println!("token1: {:?}", pool_key.token1);
-                    println!("creator fee: {:?}", creator_fee);
-                    // erc20.transfer(pool_key.token1, creator_fee.try_into().unwrap());
                     let protocol_key = SavedBalanceKey {
                         owner: self.protocol_address.read(), 
                         token: pool_key.token1, 
                         salt: 1,
                     };
                     core.save(protocol_key, protocol_fee);
+                    // core.load(protocol_key.token, protocol_key.salt, protocol_fee);
+
                 }
                 
-                // Pay the input token (amount1) and zero out both deltas before returning
-                // let paid_amount1 = delta.amount1.mag - total_fee;
-                // if paid_amount1 > 0 {
-                //     let input_key = SavedBalanceKey {
-                //         owner: self.router_address.read(),
-                //         token: pool_key.token1,
-                //         salt: 1,
-                //     };
-                //     core.save(input_key, paid_amount1);
-                // }
-                let total_less_fee = delta.amount1.mag - total_fee;
-                // if total_less_fee > 0 {
-                //     let input_key = SavedBalanceKey {
-                //         owner: caller,
-                //         token: pool_key.token1,
-                //         salt: 1,
-                //     };
-                //     core.save(input_key, total_less_fee);
-                // }
-                new_delta.amount1.mag = total_less_fee;
+                // Pay the remaining amount to caller (router)
+                let remaining_amount = delta.amount1.mag - total_fee;
+                if remaining_amount > 0 {
+                    let input_key = SavedBalanceKey {
+                        owner: caller,
+                        token: pool_key.token1,
+                        salt: 1,
+                    };
+                    core.save(input_key, remaining_amount);
+                    // core.load(input_key.token, input_key.salt, remaining_amount);
 
-                // new_delta.amount0.mag = 0;
-                // new_delta.amount1.mag = 0;
-            } 
-            // else {
-            //     // If neither is negative, zero out both to be safe
-            //     new_delta.amount0.mag = 0;
-            //     new_delta.amount1.mag = 0;
-            // }
+                }
+            }
 
-
-            // let mut swaps = consume_callback_data::<Array<Swap>>(core, data);
-            // let mut swaps:Array<Swap> = consume_callback_data(core, data);
-
-            // println!("is_token1: {:?}", is_token1);
-            // // println!("pool_key: {:?}", pool_key);
-            // println!("sqrt_ratio_limit: {:?}", sqrt_ratio_limit);
-          // Serialize and return the modified delta
-            let mut result_data = array![];
-            Serde::serialize(@new_delta, ref result_data);
-            result_data.span()
-            // array![].span()
+            // Return empty array - this is crucial for NOT_ZEROED error
+            // Following the limit orders pattern
+            array![].span()
         }
     }
 
@@ -602,6 +518,50 @@ pub mod InternalSwapPool {
             result_data.span()
         }
     }
+    // // Core ISP logic - handles forwarded calls from router
+    // #[abi(embed_v0)]
+    // impl ForwardeeImpl of IForwardee<ContractState> {
+    //     fn forwarded(
+    //         ref self: ContractState, original_locker: ContractAddress, id: u32, data: Span<felt252>,
+    //     ) -> Span<felt252> {
+    //         println!("forwarded");
+
+    //         let core = self.core.read();
+
+    //         // Consume the callback data from router
+    //         let swap_data: Swap = consume_callback_data::<Swap>(core, data);
+            
+    //         println!("try swap router core");
+
+    //         let i = 0;
+    //         let token = swap_data.token_amount.token;
+    //         let token1 = swap_data.route[i].pool_key.token1;
+    //         let is_token1 = *token1 == token;
+    //         let pool_key = swap_data.route[i].pool_key;
+    //         let skip_ahead = swap_data.route[i].skip_ahead;
+    //         let sqrt_ratio_limit = swap_data.route[i].sqrt_ratio_limit;
+            
+    //         // Perform the swap - fees will be handled in the locked function
+    //         let result: Delta = core
+    //             .swap(
+    //                 *pool_key,
+    //                 SwapParameters {
+    //                     amount: swap_data.token_amount.amount,
+    //                     is_token1: is_token1,
+    //                     sqrt_ratio_limit: *sqrt_ratio_limit,
+    //                     skip_ahead: *skip_ahead,
+    //                 },
+    //             );
+
+    //         println!("swap done");
+
+    //         // Return the original delta - fees are handled in locked function
+    //         // Following the limit orders pattern
+    //         let mut result_data = array![];
+    //         Serde::serialize(@result, ref result_data);
+    //         result_data.span()
+    //     }
+    // }
 
     // Public interface for ISP functionality
     #[abi(embed_v0)]
