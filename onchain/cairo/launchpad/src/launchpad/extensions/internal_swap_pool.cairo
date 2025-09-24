@@ -23,7 +23,7 @@ pub trait IInternalSwapPool<TContractState> {
     fn accumulate_fees(ref self: TContractState, pool_key: PoolKey, token: ContractAddress, amount: u128);
     fn get_native_token(self: @TContractState) -> ContractAddress;
     fn calc_fee(ref self: TContractState, amount: u128) -> u128;
-    fn calc_total_fee(ref self: TContractState, amount: u128) -> u128;
+    fn calc_total_fee(ref self: TContractState, amount: u128) -> (u128, u128, u128);
     fn split_fees(ref self: TContractState, total_fee: u128) -> (u128, u128);
 }
 
@@ -293,13 +293,19 @@ pub mod InternalSwapPool {
             let tick_after_swap = core.get_pool_price(pool_key).tick;
             println!("tick_after_swap: {:?}", tick_after_swap);
 
+            let mut new_delta = delta;
+            let mut total_fee:u128 = 0;
+            let mut creator_fee:u128 = 0;
+            let mut protocol_fee:u128 = 0;
             // Process fees using core.save() - following the limit orders pattern
             // This is the correct way to handle fees in Ekubo extensions
             if delta.amount0.sign {
                 println!("Token0 negative: processing fees for amount0");
-                let total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount0.mag);
-                let (creator_fee, protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
-                
+                let (_total_fee, _creator_fee, _protocol_fee) = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount0.mag);
+                // let (creator_fee, protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
+                total_fee = _total_fee;
+                creator_fee = _creator_fee;
+                protocol_fee = _protocol_fee;
                 // Send creator fee to creator address
                 if creator_fee > 0 {
                     let creator_key = SavedBalanceKey {
@@ -320,21 +326,32 @@ pub mod InternalSwapPool {
                     core.save(protocol_key, protocol_fee);
                 }
                 
-                // Pay the remaining amount to router
-                let remaining_amount = delta.amount0.mag - total_fee;
-                if remaining_amount > 0 {
-                    let input_key = SavedBalanceKey {
-                        owner: self.router_address.read(),
-                        token: pool_key.token0,
-                        salt: 0,
-                    };
-                    core.save(input_key, remaining_amount);
-                }
+                // // Pay the remaining amount to router
+                // let remaining_amount = delta.amount0.mag - total_fee;
+                // if remaining_amount > 0 {
+                //     let input_key = SavedBalanceKey {
+                //         owner: self.router_address.read(),
+                //         token: pool_key.token0,
+                //         salt: 0,
+                //     };
+                //     core.save(input_key, remaining_amount);
+                // }
+                println!("new_delta.amount0.mag: {:?}", new_delta.amount0.mag);
+                println!("delta.amount0.mag: {:?}", delta.amount0.mag);
+                println!("total_fee: {:?}", total_fee);
+                new_delta.amount0.mag = delta.amount0.mag - total_fee;
+                println!("updated new_delta.amount0.mag: {:?}", new_delta.amount0.mag);
+
             } else if delta.amount1.sign {
                 println!("Token1 negative: processing fees for amount1");
-                let total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount1.mag);
-                let (creator_fee, protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
-                
+                let (_total_fee, _creator_fee, _protocol_fee) = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount1.mag);
+                // let (creator_fee, protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
+                total_fee = _total_fee;
+                creator_fee = _creator_fee;
+                protocol_fee = _protocol_fee;
+                println!("creator_fee: {:?}", creator_fee);
+                println!("protocol_fee: {:?}", protocol_fee);
+                println!("total_fee: {:?}", total_fee);
                 // Send creator fee to creator address
                 if creator_fee > 0 {
                     let creator_key = SavedBalanceKey {
@@ -342,7 +359,9 @@ pub mod InternalSwapPool {
                         token: pool_key.token1, 
                         salt: 1,
                     };
+                    println!("creator_key save: {:?}", creator_key.token);
                     core.save(creator_key, creator_fee);
+                    // println!("creator_key load: {:?}", creator_key.token);
                     // core.load(creator_key.token, creator_key.salt, creator_fee);
 
                 }
@@ -354,170 +373,200 @@ pub mod InternalSwapPool {
                         token: pool_key.token1, 
                         salt: 1,
                     };
+                    println!("protocol_key save: {:?}", protocol_key.token);
                     core.save(protocol_key, protocol_fee);
+                    println!("protocol_key load: {:?}", protocol_key.token);
                     // core.load(protocol_key.token, protocol_key.salt, protocol_fee);
 
                 }
                 
-                // Pay the remaining amount to caller (router)
-                let remaining_amount = delta.amount1.mag - total_fee;
-                if remaining_amount > 0 {
-                    let input_key = SavedBalanceKey {
-                        owner: caller,
-                        token: pool_key.token1,
-                        salt: 1,
-                    };
-                    core.save(input_key, remaining_amount);
-                    // core.load(input_key.token, input_key.salt, remaining_amount);
+                // // Pay the remaining amount to caller (router)
+                // let remaining_amount = delta.amount1.mag - total_fee;
+                // if remaining_amount > 0 {
+                //     let input_key = SavedBalanceKey {
+                //         owner: caller,
+                //         token: pool_key.token1,
+                //         salt: 1,
+                //     };
+                //     core.save(input_key, remaining_amount);
+                //     core.load(input_key.token, input_key.salt, remaining_amount);
 
-                }
+                // }
+                println!("new_delta.amount1.mag: {:?}", new_delta.amount1.mag);
+                println!("delta.amount1.mag: {:?}", delta.amount1.mag);
+                println!("total_fee: {:?}", total_fee);
+                new_delta.amount1.mag = delta.amount1.mag - creator_fee - protocol_fee;
+                new_delta.amount0.mag = delta.amount0.mag - creator_fee - protocol_fee;
+
+
+                println!("updated new_delta.amount1.mag: {:?}", new_delta.amount1.mag);
+                println!("updated new_delta.amount0.mag: {:?}", new_delta.amount0.mag);
             }
 
             // Return empty array - this is crucial for NOT_ZEROED error
             // Following the limit orders pattern
-            array![].span()
+            let mut result_data = array![];
+            Serde::serialize(@new_delta, ref result_data);
+            println!("result_data amount0: {:?}", new_delta.amount1.mag);
+            println!("result_data amount1: {:?}", new_delta.amount0.mag);
+            result_data.span()
+            // array![].span()
+
         }
     }
 
 
     // Core ISP logic - handles forwarded calls from router
-    #[abi(embed_v0)]
-    impl ForwardeeImpl of IForwardee<ContractState> {
-        fn forwarded(
-            ref self: ContractState, original_locker: ContractAddress, id: u32, data: Span<felt252>,
-        ) -> Span<felt252> {
-            println!("forwarded");
+    // #[abi(embed_v0)]
+    // impl ForwardeeImpl of IForwardee<ContractState> {
+    //     fn forwarded(
+    //         ref self: ContractState, original_locker: ContractAddress, id: u32, data: Span<felt252>,
+    //     ) -> Span<felt252> {
+    //         println!("forwarded");
 
-            let core = self.core.read();
+    //         let core = self.core.read();
 
-            // Consume the callback data from router
-            let mut swap_data: Swap = consume_callback_data::<Swap>(core, data);
-            // let mut swaps = consume_callback_data::<Array<Swap>>(core, data);
+    //         // Consume the callback data from router
+    //         let mut swap_data: Swap = consume_callback_data::<Swap>(core, data);
+    //         // let mut swaps = consume_callback_data::<Array<Swap>>(core, data);
             
 
-            // Determine if it is token1
+    //         // Determine if it is token1
 
-            println!("try swap router core");
+    //         println!("try swap router core");
 
-            let i = 0;
+    //         let i = 0;
 
-            let token = swap_data.token_amount.token;
-            let token1 = swap_data.route[i].pool_key.token1;
-            let is_token1 = *token1 == token;
+    //         let token = swap_data.token_amount.token;
+    //         let token1 = swap_data.route[i].pool_key.token1;
+    //         let is_token1 = *token1 == token;
 
-            let pool_key = swap_data.route[i].pool_key;
+    //         let pool_key = swap_data.route[i].pool_key;
 
-            let skip_ahead = swap_data.route[i].skip_ahead;
-            let sqrt_ratio_limit = swap_data.route[i].sqrt_ratio_limit;
-            // Directly call core.swap here instead of execute_isp_swap
-            let result: Delta = core
-                .swap(
-                    *pool_key,
-                    SwapParameters {
-                        amount: swap_data.token_amount.amount,
-                        is_token1: is_token1,
-                        sqrt_ratio_limit: *sqrt_ratio_limit,
-                        skip_ahead: *skip_ahead,
-                    },
-                );
+    //         let skip_ahead = swap_data.route[i].skip_ahead;
+    //         let sqrt_ratio_limit = swap_data.route[i].sqrt_ratio_limit;
+    //         // Directly call core.swap here instead of execute_isp_swap
+    //         let result: Delta = core
+    //             .swap(
+    //                 *pool_key,
+    //                 SwapParameters {
+    //                     amount: swap_data.token_amount.amount,
+    //                     is_token1: is_token1,
+    //                     sqrt_ratio_limit: *sqrt_ratio_limit,
+    //                     skip_ahead: *skip_ahead,
+    //                 },
+    //             );
 
-            // Handle fees based on the swap result
-            let mut new_delta = result;
-            println!("swap done");
+    //         // Handle fees based on the swap result
+    //         let mut new_delta = result;
+    //         println!("swap done");
 
 
-            let mut total_fee = 0;
-            let mut creator_fee = 0;
-            let mut protocol_fee = 0;
-            if result.amount0.sign {
-                // Token0 negative: take fee from amount0
+    //         let mut total_fee:u128 = 0;
+    //         let mut creator_fee:u128 = 0;
+    //         let mut protocol_fee:u128 = 0;
+    //         if result.amount0.sign {
+    //             // Token0 negative: take fee from amount0
 
-                total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount0.mag);
-                let (_creator_fee, _protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
+    //             let (_total_fee, _creator_fee, _protocol_fee) = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount0.mag);
+    //             // let (_creator_fee, _protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
                 
-                creator_fee = _creator_fee;
-                protocol_fee = _protocol_fee;
-                // Send creator fee to creator address
-                if creator_fee > 0 {
-                    let creator_key = SavedBalanceKey {
-                        owner: self.creator.read(), 
-                        token: *pool_key.token0, 
-                        salt: 0,
-                    };
-                    core.save(creator_key, creator_fee);
-                }
+    //             creator_fee = _creator_fee;
+    //             protocol_fee = _protocol_fee;
+    //             total_fee = _total_fee;
+    //             // Send creator fee to creator address
+    //             if creator_fee > 0 {
+    //                 let creator_key = SavedBalanceKey {
+    //                     owner: self.creator.read(), 
+    //                     token: *pool_key.token0, 
+    //                     salt: 0,
+    //                 };
+    //                 core.save(creator_key, creator_fee);
+    //                 core.load(creator_key.token, creator_key.salt, creator_fee);
+    //             }
                 
-                // Send protocol fee to protocol address
-                if protocol_fee > 0 {
-                    let protocol_key = SavedBalanceKey {
-                        owner: self.protocol_address.read(), 
-                        token: *pool_key.token0, 
-                        salt: 0,
-                    };
-                    core.save(protocol_key, protocol_fee);
-                }
+    //             // Send protocol fee to protocol address
+    //             if protocol_fee > 0 {
+    //                 let protocol_key = SavedBalanceKey {
+    //                     owner: self.protocol_address.read(), 
+    //                     token: *pool_key.token0, 
+    //                     salt: 0,
+    //                 };
+    //                 core.save(protocol_key, protocol_fee);
+    //                 core.load(protocol_key.token, protocol_key.salt, protocol_fee);
+    //             }
                 
-                new_delta.amount0.mag = result.amount0.mag - total_fee;
+    //             new_delta.amount0.mag = result.amount0.mag - total_fee;
 
-                // let fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount0.mag);
-                // // Credit fee to internal swap pool owner
-                // let owner = self.owned.get_owner();
-                // let key = SavedBalanceKey {
-                //     owner, token: swap_data.route.pool_key.token0, salt: 0,
-                // };
-                // core.save(key, fee);
-                // new_delta.amount0.mag = result.amount0.mag - fee;
+    //             // let fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount0.mag);
+    //             // // Credit fee to internal swap pool owner
+    //             // let owner = self.owned.get_owner();
+    //             // let key = SavedBalanceKey {
+    //             //     owner, token: swap_data.route.pool_key.token0, salt: 0,
+    //             // };
+    //             // core.save(key, fee);
+    //             // new_delta.amount0.mag = result.amount0.mag - fee;
 
-            } else if result.amount1.sign {
-                // Token1 negative: take fee from amount1
-                total_fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount1.mag);
-                let (_creator_fee, _protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
+    //         } else if result.amount1.sign {
+    //             // Token1 negative: take fee from amount1
+    //             let (_total_fee, _creator_fee, _protocol_fee) = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount0.mag);
+    //             // let (_creator_fee, _protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
                 
-                creator_fee = _creator_fee;
-                protocol_fee = _protocol_fee;
-                // Send creator fee to creator addr
-                // Send creator fee to creator address
-                if creator_fee > 0 {
-                    let creator_key = SavedBalanceKey {
-                        owner: self.creator.read(), 
-                        token: *pool_key.token1, 
-                        salt: 1,
-                    };
-                    core.save(creator_key, creator_fee);
-                }
-                
-                // Send protocol fee to protocol address
-                if protocol_fee > 0 {
-                    let protocol_key = SavedBalanceKey {
-                        owner: self.protocol_address.read(), 
-                        token: *pool_key.token1, 
-                        salt: 1,
-                    };
-                    core.save(protocol_key, protocol_fee);
-                }
-                
-                new_delta.amount1.mag = result.amount1.mag - total_fee;
-                
-                // let fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount1.mag);
-                // // Save fee for amount1
-                // let key = SavedBalanceKey {
-                //     owner: get_contract_address(), token: swap_data.route.pool_key.token1, salt: 1,
-                // };
-                // core.save(key, fee);
-                // // Load the saved balance
-                // core.load(key.token, key.salt, fee);
-                // // Accumulate as protocol fees using ekubo core
-                // core.accumulate_as_fees(swap_data.route.pool_key, 0, fee);
-                // new_delta.amount1.mag = result.amount1.mag - fee;
+    //             creator_fee = _creator_fee;
+    //             protocol_fee = _protocol_fee;
+    //             total_fee = _total_fee;
+    //             // Send creator fee to creator addr
+    //             // Send creator fee to creator address
+    //             if creator_fee > 0 {
+    //                 let creator_key = SavedBalanceKey {
+    //                     owner: self.creator.read(), 
+    //                     token: *pool_key.token1, 
+    //                     salt: 1,
+    //                 };
+    //                 println!("creator_key: {:?}", creator_key.token);
+    //                 core.save(creator_key, creator_fee);
+    //                 println!("creator_fee: {:?}", creator_fee);
+    //                 core.load(creator_key.token, creator_key.salt, creator_fee);
 
-            }
+    //             }
+                
+    //             // Send protocol fee to protocol address
+    //             if protocol_fee > 0 {
+    //                 let protocol_key = SavedBalanceKey {
+    //                     owner: self.protocol_address.read(), 
+    //                     token: *pool_key.token1, 
+    //                     salt: 1,
+    //                 };
+    //                 println!("protocol_key: {:?}", protocol_key.token);
+    //                 core.save(protocol_key, protocol_fee);
+    //                 println!("protocol_fee: {:?}", protocol_fee);
+    //                 core.load(protocol_key.token, protocol_key.salt, protocol_fee);
 
-            // Serialize and return the modified delta
-            let mut result_data = array![];
-            Serde::serialize(@new_delta, ref result_data);
-            result_data.span()
-        }
-    }
+    //             }
+                
+    //             new_delta.amount1.mag = result.amount1.mag - total_fee;
+                
+    //             // let fee = InternalSwapPoolImpl::calc_total_fee(ref self, result.amount1.mag);
+    //             // // Save fee for amount1
+    //             // let key = SavedBalanceKey {
+    //             //     owner: get_contract_address(), token: swap_data.route.pool_key.token1, salt: 1,
+    //             // };
+    //             // core.save(key, fee);
+    //             // // Load the saved balance
+    //             // core.load(key.token, key.salt, fee);
+    //             // // Accumulate as protocol fees using ekubo core
+    //             // core.accumulate_as_fees(swap_data.route.pool_key, 0, fee);
+    //             // new_delta.amount1.mag = result.amount1.mag - fee;
+
+    //         }
+
+    //         // Serialize and return the modified delta
+    //         // let mut result_data = array![];
+    //         // Serde::serialize(@new_delta, ref result_data);
+    //         // result_data.span()
+    //         array![].span()
+    //     }
+    // }
     // // Core ISP logic - handles forwarded calls from router
     // #[abi(embed_v0)]
     // impl ForwardeeImpl of IForwardee<ContractState> {
@@ -603,11 +652,16 @@ pub mod InternalSwapPool {
         }
 
         // Helper functions for fee calculation and distribution
-        fn calc_total_fee(ref self: ContractState, amount: u128) -> u128 {
+        fn calc_total_fee(ref self: ContractState, amount: u128) -> (u128, u128, u128) {
             let creator_percentage = self.fee_percentage_creator.read();
             let protocol_percentage = self.fee_percentage_protocol.read();
             let total_fee_percentage = creator_percentage + protocol_percentage;
-            (amount * total_fee_percentage.try_into().unwrap()) / BPS.try_into().unwrap()  // Assuming percentages are in basis points (1% = 100)
+            println!("total_fee_percentage: {:?}", total_fee_percentage);
+            let creator_fee = (amount * creator_percentage.try_into().unwrap()) / BPS.try_into().unwrap();
+            let protocol_fee = (amount * protocol_percentage.try_into().unwrap()) / BPS.try_into().unwrap();
+            let total_fee = creator_fee + protocol_fee;
+            println!("total_fee: {:?}", total_fee);
+            (total_fee, creator_fee, protocol_fee)
         }
 
         fn split_fees(ref self: ContractState, total_fee: u128) -> (u128, u128) {

@@ -90,6 +90,8 @@ pub mod RouterLite {
                 while let Option::Some(node) = route.pop_front() {
                     let is_token1 = token_amount.token == node.pool_key.token1;
 
+
+                    println!("router core swap");
                     let delta = core
                         .swap(
                             node.pool_key,

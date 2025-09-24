@@ -371,105 +371,107 @@ fn test_isp_swap_token0_for_token1() {
 
 }
 
-// #[test]
-// #[fork("mainnet")]
-// fn test_isp_swap_token1_for_token0_odd_fee() {
-//     let (pool_key, _) = setup();
-//     ekubo_core().initialize_pool(pool_key, Zero::zero());
+#[test]
+#[fork("Mainnet")]
+fn test_isp_swap_token1_for_token0_odd_fee() {
+    let (pool_key, _) = setup();
+    ekubo_core().initialize_pool(pool_key, Zero::zero());
     
-//     // Transfer tokens and mint position (your existing code)
-//     IERC20Dispatcher{ contract_address: pool_key.token0 }
-//         .transfer(positions().contract_address, 1_000_000);
-//     IERC20Dispatcher{ contract_address: pool_key.token1 }
-//         .transfer(positions().contract_address, 1_000_000);
-//     positions().mint_and_deposit_and_clear_both(
-//         pool_key,
-//         Bounds {
-//             lower: i129 { mag: 2302695, sign: true },
-//             upper: i129 { mag: 2302695, sign: false }
-//         },
-//         0
-//     );
+    // Transfer tokens and mint position (your existing code)
+    IERC20Dispatcher{ contract_address: pool_key.token0 }
+        .transfer(positions().contract_address, 1_000_000);
+    IERC20Dispatcher{ contract_address: pool_key.token1 }
+        .transfer(positions().contract_address, 1_000_000);
+    positions().mint_and_deposit_and_clear_both(
+        pool_key,
+        Bounds {
+            lower: i129 { mag: 2302695, sign: true },
+            upper: i129 { mag: 2302695, sign: false }
+        },
+        0
+    );
     
-//     // Deploy the router
-//     let router_class = declare("IRouterLite").unwrap().contract_class();
-//     let router = deploy_router(
-//         router_class, 
-//         // get_contract_address(), 
-//         ekubo_core(),
-//         // pool_key.token0
-//     );
+    // Deploy the router
+    let router_class = declare("RouterLite").unwrap().contract_class();
+    let router = deploy_router(
+        *router_class, 
+        // get_contract_address(), 
+        ekubo_core(),
+        // pool_key.token0
+    );
     
-//     // Prepare swap parameters
-//     let amount_in: u128 = 100_01; //ODD
-//     let token_amount = TokenAmount {
-//         token: pool_key.token1,
-//         amount: i129 { mag: amount_in, sign: false }, // Exact input (positive)
-//     };
+    // Prepare swap parameters
+    let amount_in: u128 = 100_01; //ODD
+    let token_amount = TokenAmount {
+        token: pool_key.token1,
+        amount: i129 { mag: amount_in, sign: false }, // Exact input (positive)
+    };
 
-//     // Get current pool price
-//     let pool_price = ekubo_core().get_pool_price(pool_key);
-//     let current_sqrt_price = pool_price.sqrt_ratio;
-//     println!("Current sqrt price: {}", current_sqrt_price);
+    // Get current pool price
+    let pool_price = ekubo_core().get_pool_price(pool_key);
+    let current_sqrt_price = pool_price.sqrt_ratio;
+    println!("Current sqrt price: {}", current_sqrt_price);
 
-//     // Determine trade direction
-//     let _is_token1 = pool_key.token1 == token_amount.token;
-//     // -5% 323268248574891540290205877060179800883 'INSUFFICIENT_TF_BALANCE'
-//     // 0% 340282366920938463463374607431768211456 Success
-//     // 5% 357296485266985386636543337803356622028 'LIMIT_DIRECTION'
-//     // 20% 408338840305126156156049528918121853747 'LIMIT_DIRECTION' 
-//     let sqrt_ratio_limit : u256 = 357296485266985386636543337803356622028;
-//     println!("Sqrt price limit: {}", sqrt_ratio_limit);
+    // Determine trade direction
+    let _is_token1 = pool_key.token1 == token_amount.token;
+    // -5% 323268248574891540290205877060179800883 'INSUFFICIENT_TF_BALANCE'
+    // 0% 340282366920938463463374607431768211456 Success
+    // 5% 357296485266985386636543337803356622028 'LIMIT_DIRECTION'
+    // 20% 408338840305126156156049528918121853747 'LIMIT_DIRECTION' 
+    let sqrt_ratio_limit : u256 = 357296485266985386636543337803356622028;
+    println!("Sqrt price limit: {}", sqrt_ratio_limit);
 
-//     let route = RouteNode {
-//         pool_key,
-//         sqrt_ratio_limit,
-//         skip_ahead: 0,
-//     };
-//     let swap_data = Swap {
-//         route,
-//         token_amount,
-//     };
+    let route = RouteNode {
+        pool_key,
+        sqrt_ratio_limit,
+        skip_ahead: 0,
+    };
 
-//     let balance_before = IERC20Dispatcher{ contract_address: pool_key.token1 }
-//         .balanceOf(get_contract_address());
+    let route_array = array![route];
+    let swap_data = Swap {
+        route:route_array,
+        token_amount,
+    };
+    let balance_before = IERC20Dispatcher{ contract_address: pool_key.token1 }
+        .balanceOf(get_contract_address());
 
-//     // Transfer tokens to router to spend
-//     IERC20Dispatcher{ contract_address: pool_key.token1 }
-//         .transfer(router.contract_address, amount_in.into());
+    // Transfer tokens to router to spend
+    IERC20Dispatcher{ contract_address: pool_key.token1 }
+        .transfer(router.contract_address, amount_in.into());
 
-//     // Print balances before swap
-//     let balance_core1 = IERC20Dispatcher{ contract_address: pool_key.token1 }
-//         .balanceOf(ekubo_core().contract_address);
+    // Print balances before swap
+    let balance_core1 = IERC20Dispatcher{ contract_address: pool_key.token1 }
+        .balanceOf(ekubo_core().contract_address);
 
-//     println!("Core balance token1 before swap: {}", balance_core1);
+    println!("Core balance token1 before swap: {}", balance_core1);
 
-//     let balance_core0 = IERC20Dispatcher{ contract_address: pool_key.token0 }
-//         .balanceOf(ekubo_core().contract_address);
+    let balance_core0 = IERC20Dispatcher{ contract_address: pool_key.token0 }
+        .balanceOf(ekubo_core().contract_address);
 
-//     println!("Core balance token0 before swap: {}", balance_core0);
+    println!("Core balance token0 before swap: {}", balance_core0);
 
-//     // Execute the swap
-//     router.swap(swap_data);
+    // Execute the swap
+    // router.swap(swap_data);
+    router.swap(route, token_amount);
 
-//     let balance_after = IERC20Dispatcher{ contract_address: pool_key.token1 }
-//         .balanceOf(get_contract_address());
+    let balance_after = IERC20Dispatcher{ contract_address: pool_key.token1 }
+        .balanceOf(get_contract_address());
 
-//     assert(
-//         balance_after == balance_before - amount_in.into(), 'not correct token balance'
-//     );
+    assert(
+        balance_after == balance_before - amount_in.into(), 'not correct token balance'
+    );
     
-//     let balance_core1 = IERC20Dispatcher{ contract_address: pool_key.token1 }
-//         .balanceOf(ekubo_core().contract_address);
+    let balance_core1 = IERC20Dispatcher{ contract_address: pool_key.token1 }
+        .balanceOf(ekubo_core().contract_address);
 
-//     println!("Core balance token1 after swap: {}", balance_core1);
+    println!("Core balance token1 after swap: {}", balance_core1);
 
-//     let balance_core0 = IERC20Dispatcher{ contract_address: pool_key.token0 }
-//         .balanceOf(ekubo_core().contract_address);
+    let balance_core0 = IERC20Dispatcher{ contract_address: pool_key.token0 }
+        .balanceOf(ekubo_core().contract_address);
 
-//     println!("Core balance token0 after swap: {}", balance_core0);
+    println!("Core balance token0 after swap: {}", balance_core0);
 
-// }
+}
 
 // #[test]
 // #[fork("mainnet")]
