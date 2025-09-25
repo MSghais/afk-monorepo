@@ -1154,7 +1154,7 @@ pub mod UnrugLiquidity {
                             contract_address_salt.try_into().unwrap(),
                         );
                     }
-                    println!("extension address {:?}", extension_address);
+                    // println!("extension address {:?}", extension_address);
 
                     let pool_key = PoolKey {
                         token0: token0,

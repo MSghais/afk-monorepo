@@ -234,7 +234,7 @@ pub mod InternalSwapPool {
             pool_key: PoolKey,
             params: SwapParameters,
         ) {
-            println!("before_swap");
+            // println!("before_swap");
             // let mut swaps = consume_callback_data::<Array<Swap>>(self.core.read(), @(pool_key, params.skip_ahead));
 
             // call_core_with_callback::<(PoolKey, u128, SwapParameters), ()>(self.core.read(), @(pool_key, params.skip_ahead, params));
@@ -247,7 +247,7 @@ pub mod InternalSwapPool {
             params: SwapParameters,
             delta: Delta,
         ) {
-            println!("after_swap");
+            // println!("after_swap");
 
             call_core_with_callback::<(ContractAddress, PoolKey, u128, SwapParameters, Delta), ()>(self.core.read(), @(caller, pool_key, params.skip_ahead, params, delta));
 
@@ -287,11 +287,11 @@ pub mod InternalSwapPool {
     impl LockedImpl of ILocker<ContractState> {
         fn locked(ref self: ContractState, id: u32, data: Span<felt252>) -> Span<felt252> {
             let core = self.core.read();
-            println!("locked");
+            // println!("locked");
             let (caller, pool_key, skip_ahead, params, delta) = consume_callback_data::<(ContractAddress, PoolKey, u128, SwapParameters, Delta)>(core, data);
 
             let tick_after_swap = core.get_pool_price(pool_key).tick;
-            println!("tick_after_swap: {:?}", tick_after_swap);
+            // println!("tick_after_swap: {:?}", tick_after_swap);
 
             let mut new_delta = delta;
             let mut total_fee:u128 = 0;
@@ -299,118 +299,130 @@ pub mod InternalSwapPool {
             let mut protocol_fee:u128 = 0;
             // Process fees using core.save() - following the limit orders pattern
             // This is the correct way to handle fees in Ekubo extensions
-            if delta.amount0.sign {
-                println!("Token0 negative: processing fees for amount0");
-                let (_total_fee, _creator_fee, _protocol_fee) = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount0.mag);
-                // let (creator_fee, protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
-                total_fee = _total_fee;
-                creator_fee = _creator_fee;
-                protocol_fee = _protocol_fee;
-                // Send creator fee to creator address
-                if creator_fee > 0 {
-                    let creator_key = SavedBalanceKey {
-                        owner: self.creator.read(), 
-                        token: pool_key.token0, 
-                        salt: 0,
-                    };
-                    core.save(creator_key, creator_fee);
-                }
+            // if delta.amount0.sign {
+            //     println!("Token0 negative: processing fees for amount0");
+            //     let (_total_fee, _creator_fee, _protocol_fee) = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount0.mag);
+            //     // let (creator_fee, protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
+            //     total_fee = _total_fee;
+            //     creator_fee = _creator_fee;
+            //     protocol_fee = _protocol_fee;
+            //     // Send creator fee to creator address
+            //     if creator_fee > 0 {
+            //         let creator_key = SavedBalanceKey {
+            //             owner: self.creator.read(), 
+            //             token: pool_key.token0, 
+            //             salt: 0,
+            //         };
+            //         core.save(creator_key, creator_fee);
+            //     }
                 
-                // Send protocol fee to protocol address
-                if protocol_fee > 0 {
-                    let protocol_key = SavedBalanceKey {
-                        owner: self.protocol_address.read(), 
-                        token: pool_key.token0, 
-                        salt: 0,
-                    };
-                    core.save(protocol_key, protocol_fee);
-                }
+            //     // Send protocol fee to protocol address
+            //     if protocol_fee > 0 {
+            //         let protocol_key = SavedBalanceKey {
+            //             owner: self.protocol_address.read(), 
+            //             token: pool_key.token0, 
+            //             salt: 0,
+            //         };
+            //         core.save(protocol_key, protocol_fee);
+            //     }
                 
-                // // Pay the remaining amount to router
-                // let remaining_amount = delta.amount0.mag - total_fee;
-                // if remaining_amount > 0 {
-                //     let input_key = SavedBalanceKey {
-                //         owner: self.router_address.read(),
-                //         token: pool_key.token0,
-                //         salt: 0,
-                //     };
-                //     core.save(input_key, remaining_amount);
-                // }
-                println!("new_delta.amount0.mag: {:?}", new_delta.amount0.mag);
-                println!("delta.amount0.mag: {:?}", delta.amount0.mag);
-                println!("total_fee: {:?}", total_fee);
-                new_delta.amount0.mag = delta.amount0.mag - total_fee;
-                println!("updated new_delta.amount0.mag: {:?}", new_delta.amount0.mag);
+            //     // // Pay the remaining amount to router
+            //     // let remaining_amount = delta.amount0.mag - total_fee;
+            //     // if remaining_amount > 0 {
+            //     //     let input_key = SavedBalanceKey {
+            //     //         owner: self.router_address.read(),
+            //     //         token: pool_key.token0,
+            //     //         salt: 0,
+            //     //     };
+            //     //     core.save(input_key, remaining_amount);
+            //     // }
+            //     println!("new_delta.amount0.mag: {:?}", new_delta.amount0.mag);
+            //     println!("delta.amount0.mag: {:?}", delta.amount0.mag);
+            //     println!("total_fee: {:?}", total_fee);
+            //     new_delta.amount0.mag = delta.amount0.mag - total_fee;
+            //     println!("updated new_delta.amount0.mag: {:?}", new_delta.amount0.mag);
 
-            } else if delta.amount1.sign {
-                println!("Token1 negative: processing fees for amount1");
-                let (_total_fee, _creator_fee, _protocol_fee) = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount1.mag);
-                // let (creator_fee, protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
-                total_fee = _total_fee;
-                creator_fee = _creator_fee;
-                protocol_fee = _protocol_fee;
-                println!("creator_fee: {:?}", creator_fee);
-                println!("protocol_fee: {:?}", protocol_fee);
-                println!("total_fee: {:?}", total_fee);
-                // Send creator fee to creator address
-                if creator_fee > 0 {
-                    let creator_key = SavedBalanceKey {
-                        owner: self.creator.read(), 
-                        token: pool_key.token1, 
-                        salt: 1,
-                    };
-                    println!("creator_key save: {:?}", creator_key.token);
-                    core.save(creator_key, creator_fee);
-                    // println!("creator_key load: {:?}", creator_key.token);
-                    // core.load(creator_key.token, creator_key.salt, creator_fee);
+            // } else if delta.amount1.sign {
+            //     println!("Token1 negative: processing fees for amount1");
+            //     let (_total_fee, _creator_fee, _protocol_fee) = InternalSwapPoolImpl::calc_total_fee(ref self, delta.amount1.mag);
+            //     // let (creator_fee, protocol_fee) = InternalSwapPoolImpl::split_fees(ref self, total_fee);
+            //     total_fee = _total_fee;
+            //     creator_fee = _creator_fee;
+            //     protocol_fee = _protocol_fee;
+            //     println!("creator_fee: {:?}", creator_fee);
+            //     println!("protocol_fee: {:?}", protocol_fee);
+            //     println!("total_fee: {:?}", total_fee);
+            //     // Send creator fee to creator address
+            //     if creator_fee > 0 {
+            //         let creator_key = SavedBalanceKey {
+            //             owner: self.creator.read(), 
+            //             token: pool_key.token1, 
+            //             salt: 1,
+            //         };
+            //         println!("creator_key save: {:?}", creator_key.token);
+            //         core.save(creator_key, creator_fee);
+            //         // println!("creator_key load: {:?}", creator_key.token);
+            //         // core.load(creator_key.token, creator_key.salt, creator_fee);
 
-                }
+            //     }
                 
-                // Send protocol fee to protocol address
-                if protocol_fee > 0 {
-                    let protocol_key = SavedBalanceKey {
-                        owner: self.protocol_address.read(), 
-                        token: pool_key.token1, 
-                        salt: 1,
-                    };
-                    println!("protocol_key save: {:?}", protocol_key.token);
-                    core.save(protocol_key, protocol_fee);
-                    println!("protocol_key load: {:?}", protocol_key.token);
-                    // core.load(protocol_key.token, protocol_key.salt, protocol_fee);
+            //     // Send protocol fee to protocol address
+            //     if protocol_fee > 0 {
+            //         let protocol_key = SavedBalanceKey {
+            //             owner: self.protocol_address.read(), 
+            //             token: pool_key.token1, 
+            //             salt: 1,
+            //         };
+            //         println!("protocol_key save: {:?}", protocol_key.token);
+            //         core.save(protocol_key, protocol_fee);
+            //         println!("protocol_key load: {:?}", protocol_key.token);
+            //         // core.load(protocol_key.token, protocol_key.salt, protocol_fee);
 
-                }
+            //     }
                 
-                // // Pay the remaining amount to caller (router)
-                // let remaining_amount = delta.amount1.mag - total_fee;
-                // if remaining_amount > 0 {
-                //     let input_key = SavedBalanceKey {
-                //         owner: caller,
-                //         token: pool_key.token1,
-                //         salt: 1,
-                //     };
-                //     core.save(input_key, remaining_amount);
-                //     core.load(input_key.token, input_key.salt, remaining_amount);
+            //     // // Pay the remaining amount to caller (router)
+            //     // let remaining_amount = delta.amount1.mag - total_fee;
+            //     // if remaining_amount > 0 {
+            //     //     let input_key = SavedBalanceKey {
+            //     //         owner: caller,
+            //     //         token: pool_key.token1,
+            //     //         salt: 1,
+            //     //     };
+            //     //     core.save(input_key, remaining_amount);
+            //     //     core.load(input_key.token, input_key.salt, remaining_amount);
 
-                // }
-                println!("new_delta.amount1.mag: {:?}", new_delta.amount1.mag);
-                println!("delta.amount1.mag: {:?}", delta.amount1.mag);
-                println!("total_fee: {:?}", total_fee);
-                new_delta.amount1.mag = delta.amount1.mag - creator_fee - protocol_fee;
-                new_delta.amount0.mag = delta.amount0.mag - creator_fee - protocol_fee;
+            //     // }
+            //     println!("new_delta.amount1.mag: {:?}", new_delta.amount1.mag);
+            //     println!("delta.amount1.mag: {:?}", delta.amount1.mag);
+            //     println!("total_fee: {:?}", total_fee);
+            //     new_delta.amount1.mag = delta.amount1.mag - creator_fee - protocol_fee;
+            //     new_delta.amount0.mag = delta.amount0.mag - creator_fee - protocol_fee;
 
 
-                println!("updated new_delta.amount1.mag: {:?}", new_delta.amount1.mag);
-                println!("updated new_delta.amount0.mag: {:?}", new_delta.amount0.mag);
-            }
+            //     println!("updated new_delta.amount1.mag: {:?}", new_delta.amount1.mag);
+            //     println!("updated new_delta.amount0.mag: {:?}", new_delta.amount0.mag);
+            // }
 
+            self.emit(SwapProcessed {
+                pool_key,
+                user: caller,
+                swap_amount: delta.amount0.mag,
+                total_output: delta.amount0.mag,
+            });
+            self.emit(FeesProcessed {
+                pool_key,
+                user: caller,
+                fee_creator: creator_fee,
+                fee_protocol: protocol_fee,
+            });
             // Return empty array - this is crucial for NOT_ZEROED error
-            // Following the limit orders pattern
-            let mut result_data = array![];
-            Serde::serialize(@new_delta, ref result_data);
-            println!("result_data amount0: {:?}", new_delta.amount1.mag);
-            println!("result_data amount1: {:?}", new_delta.amount0.mag);
-            result_data.span()
-            // array![].span()
+            // // Following the limit orders pattern
+            // let mut result_data = array![];
+            // Serde::serialize(@new_delta, ref result_data);
+            // // println!("result_data amount0: {:?}", new_delta.amount1.mag);
+            // // println!("result_data amount1: {:?}", new_delta.amount0.mag);
+            // // result_data.span()
+            array![].span()
 
         }
     }
@@ -656,11 +668,11 @@ pub mod InternalSwapPool {
             let creator_percentage = self.fee_percentage_creator.read();
             let protocol_percentage = self.fee_percentage_protocol.read();
             let total_fee_percentage = creator_percentage + protocol_percentage;
-            println!("total_fee_percentage: {:?}", total_fee_percentage);
+            // println!("total_fee_percentage: {:?}", total_fee_percentage);
             let creator_fee = (amount * creator_percentage.try_into().unwrap()) / BPS.try_into().unwrap();
             let protocol_fee = (amount * protocol_percentage.try_into().unwrap()) / BPS.try_into().unwrap();
             let total_fee = creator_fee + protocol_fee;
-            println!("total_fee: {:?}", total_fee);
+            // println!("total_fee: {:?}", total_fee);
             (total_fee, creator_fee, protocol_fee)
         }
 

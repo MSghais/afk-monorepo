@@ -1,2 +1,1 @@
-afk_launchpad::tests::router_swap_test::test_isp_swap_token0_for_token1
-afk_launchpad::tests::router_swap_test::test_isp_swap_token1_for_token0_odd_fee
+afk_launchpad::tests::edge_cases_tests::edge_cases_tests::test_end_linear_with_different_supply

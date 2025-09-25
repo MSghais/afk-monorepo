@@ -1027,7 +1027,7 @@ pub mod LaunchpadMarketplace {
         // Check and modify the share of user
 
         fn claim_coin_all(ref self: ContractState, coin_address: ContractAddress) {
-            let caller = get_contract_address();
+            let caller = get_caller_address();
             // Verify if liquidity launch
             let mut launch = self.launched_coins.read(coin_address);
             assert(launch.is_liquidity_launch, errors::NOT_LAUNCHED_YET);
@@ -1395,7 +1395,7 @@ pub mod LaunchpadMarketplace {
             // let creator_fee_percent = input_creator_fee_percent;
             // let creator_fee_percent = self.creator_fee_percent.read();
 
-            println!("creator_fee_percent {:?}", creator_fee_percent);
+            // println!("creator_fee_percent {:?}", creator_fee_percent);
             assert(
                 creator_fee_percent <= MAX_FEE_CREATOR && creator_fee_percent >= ZERO_FEE_AMOUNT,
                 errors::CREATOR_FEE_OUT_OF_BOUNDS,
