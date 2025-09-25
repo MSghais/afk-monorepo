@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Complete Nostr + OBS Streaming Flow Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: #fff; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #333; border-radius: 8px; background: #2a2a2a; }
+        .step { margin: 15px 0; padding: 15px; border-left: 4px solid #007bff; background: #333; }
+        .success { border-left-color: #28a745; background: #1e3a1e; }
+        .error { border-left-color: #dc3545; background: #3a1e1e; }
+        .warning { border-left-color: #ffc107; background: #3a3a1e; }
+        button { padding: 12px 20px; margin: 8px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #666; cursor: not-allowed; }
+        .success-btn { background: #28a745; }
+        .error-btn { background: #dc3545; }
+        .warning-btn { background: #ffc107; color: #000; }
+        .result { margin: 10px 0; padding: 15px; border-radius: 5px; font-family: monospace; }
+        .success-result { background: #1e3a1e; border: 1px solid #28a745; }
+        .error-result { background: #3a1e1e; border: 1px solid #dc3545; }
+        .info-result { background: #1e3a3a; border: 1px solid #17a2b8; }
+        input, textarea { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #555; border-radius: 5px; background: #333; color: #fff; }
+        .copy-btn { padding: 5px 10px; font-size: 12px; margin-left: 10px; }
+        .status { display: inline-block; padding: 4px 8px; border-radius: 3px; font-size: 12px; font-weight: bold; }
+        .status.connected { background: #28a745; }
+        .status.disconnected { background: #dc3545; }
+        .status.pending { background: #ffc107; color: #000; }
+        code { background: #333; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+        .obs-config { background: #2a2a2a; padding: 15px; border-radius: 5px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Complete Nostr + OBS Streaming Flow Test</h1>
+        
+        <div class="section">
+            <h3>📊 System Status</h3>
+            <div class="step">
+                <strong>RTMP Server:</strong> <span id="rtmpStatus" class="status disconnected">Checking...</span>
+                <button onclick="checkRtmpServer()">Check RTMP Server</button>
+            </div>
+            <div class="step">
+                <strong>Data Backend:</strong> <span id="backendStatus" class="status disconnected">Checking...</span>
+                <button onclick="checkDataBackend()">Check Data Backend</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>🔑 Step 1: Generate Nostr Authentication</h3>
+            <div class="step">
+                <p>Generate a Nostr event for stream authentication:</p>
+                <button onclick="generateNostrEvent()">Generate Nostr Event</button>
+                <div id="nostrResult" class="result" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>🔐 Step 2: Authenticate with RTMP Server</h3>
+            <div class="step">
+                <p>Send the Nostr event to get a stream key:</p>
+                <button onclick="authenticateWithRtmp()" id="authBtn" disabled>Authenticate with RTMP</button>
+                <div id="authResult" class="result" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>📺 Step 3: Configure OBS Studio</h3>
+            <div class="step">
+                <p>Use these settings in OBS Studio:</p>
+                <div class="obs-config">
+                    <strong>RTMP URL:</strong> <code id="rtmpUrl">rtmp://localhost:1935/live/</code>
+                    <button onclick="copyToClipboard('rtmpUrl')" class="copy-btn">Copy</button><br><br>
+                    <strong>Stream Key:</strong> <code id="streamKey">[Generated stream key will appear here]</code>
+                    <button onclick="copyToClipboard('streamKey')" class="copy-btn">Copy</button>
+                </div>
+                <div class="step warning">
+                    <strong>OBS Configuration Steps:</strong>
+                    <ol>
+                        <li>Open OBS Studio</li>
+                        <li>Go to <strong>Settings → Stream</strong></li>
+                        <li>Set <strong>Service</strong> to <strong>"Custom"</strong></li>
+                        <li>Paste the RTMP URL above</li>
+                        <li>Paste the Stream Key above</li>
+                        <li>Click <strong>"OK"</strong></li>
+                        <li>Click <strong>"Start Streaming"</strong> in OBS</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>🎥 Step 4: Test Stream Connection</h3>
+            <div class="step">
+                <p>Monitor the stream connection:</p>
+                <button onclick="startStreamMonitoring()" id="monitorBtn" disabled>Start Monitoring</button>
+                <button onclick="stopStreamMonitoring()" id="stopMonitorBtn" disabled>Stop Monitoring</button>
+                <div id="streamStatus" class="result" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>🧪 Step 5: Test with FFmpeg (Alternative)</h3>
+            <div class="step">
+                <p>Test with FFmpeg instead of OBS:</p>
+                <button onclick="testWithFFmpeg()" id="ffmpegBtn" disabled>Test with FFmpeg</button>
+                <div id="ffmpegResult" class="result" style="display: none;"></div>
+                <div id="ffmpegCommand" style="display: none; margin-top: 10px;"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>📋 Debug Information</h3>
+            <div class="step">
+                <button onclick="showDebugInfo()">Show Debug Info</button>
+                <div id="debugInfo" class="result" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStreamKey = null;
+        let currentRtmpUrl = 'rtmp://localhost:1935/live/';
+        let monitoringInterval = null;
+        let nostrEvent = null;
+
+        // Check RTMP server status
+        async function checkRtmpServer() {
+            const statusEl = document.getElementById('rtmpStatus');
+            statusEl.textContent = 'Checking...';
+            statusEl.className = 'status pending';
+
+            try {
+                const response = await fetch('http://localhost:8080/health');
+                if (response.ok) {
+                    statusEl.textContent = 'Connected';
+                    statusEl.className = 'status connected';
+                } else {
+                    throw new Error('Server not responding');
+                }
+            } catch (error) {
+                statusEl.textContent = 'Disconnected';
+                statusEl.className = 'status disconnected';
+                showResult('rtmpResult', `RTMP Server Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Check data backend status
+        async function checkDataBackend() {
+            const statusEl = document.getElementById('backendStatus');
+            statusEl.textContent = 'Checking...';
+            statusEl.className = 'status pending';
+
+            try {
+                const response = await fetch('http://localhost:5050/health');
+                if (response.ok) {
+                    statusEl.textContent = 'Connected';
+                    statusEl.className = 'status connected';
+                } else {
+                    throw new Error('Backend not responding');
+                }
+            } catch (error) {
+                statusEl.textContent = 'Disconnected';
+                statusEl.className = 'status disconnected';
+                showResult('backendResult', `Data Backend Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Generate Nostr event
+        async function generateNostrEvent() {
+            try {
+                // Generate a test keypair
+                const privateKey = generatePrivateKey();
+                const publicKey = getPublicKey(privateKey);
+                
+                // Create a test event
+                const event = {
+                    pubkey: publicKey,
+                    created_at: Math.floor(Date.now() / 1000),
+                    kind: 1,
+                    tags: [
+                        ['stream', 'test-stream-' + Date.now()],
+                        ['title', 'Test Livestream'],
+                        ['t', 'livestream'],
+                        ['t', 'obs'],
+                        ['t', 'rtmp'],
+                        ['expiration', (Math.floor(Date.now() / 1000) + 3600).toString()],
+                    ],
+                    content: 'Test stream authentication event',
+                };
+
+                // Sign the event (simplified for demo)
+                event.id = await hashEvent(event);
+                event.sig = await signEvent(event, privateKey);
+
+                nostrEvent = event;
+                
+                showResult('nostrResult', `✅ Nostr Event Generated:
+ID: ${event.id}
+PubKey: ${publicKey}
+Created: ${new Date(event.created_at * 1000).toISOString()}
+Content: ${event.content}`, 'success');
+
+                document.getElementById('authBtn').disabled = false;
+                
+            } catch (error) {
+                showResult('nostrResult', `❌ Error generating Nostr event: ${error.message}`, 'error');
+            }
+        }
+
+        // Authenticate with RTMP server
+        async function authenticateWithRtmp() {
+            if (!nostrEvent) {
+                showResult('authResult', '❌ Please generate a Nostr event first', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:8080/auth/nostr', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(nostrEvent),
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    currentStreamKey = result.stream_key;
+                    document.getElementById('streamKey').textContent = currentStreamKey;
+                    
+                    showResult('authResult', `✅ Authentication Successful!
+Stream Key: ${result.stream_key}
+RTMP URL: ${currentRtmpUrl}${result.stream_key}`, 'success');
+
+                    document.getElementById('monitorBtn').disabled = false;
+                    document.getElementById('ffmpegBtn').disabled = false;
+                } else {
+                    showResult('authResult', `❌ Authentication Failed: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showResult('authResult', `❌ Authentication Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Start stream monitoring
+        function startStreamMonitoring() {
+            if (!currentStreamKey) {
+                showResult('streamStatus', '❌ No stream key available', 'error');
+                return;
+            }
+
+            monitoringInterval = setInterval(async () => {
+                try {
+                    // Check if stream is active by trying to access the HLS manifest
+                    const response = await fetch(`http://localhost:5050/livestream/${currentStreamKey}/manifest.m3u8`);
+                    const status = response.ok ? 'LIVE' : 'OFFLINE';
+                    
+                    showResult('streamStatus', `📡 Stream Status: ${status}
+Stream Key: ${currentStreamKey}
+RTMP URL: ${currentRtmpUrl}${currentStreamKey}
+HLS URL: http://localhost:5050/livestream/${currentStreamKey}/manifest.m3u8`, 
+                    response.ok ? 'success' : 'info');
+                    
+                } catch (error) {
+                    showResult('streamStatus', `📡 Stream Status: OFFLINE
+Error: ${error.message}`, 'info');
+                }
+            }, 2000);
+
+            document.getElementById('monitorBtn').disabled = true;
+            document.getElementById('stopMonitorBtn').disabled = false;
+        }
+
+        // Stop stream monitoring
+        function stopStreamMonitoring() {
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+                monitoringInterval = null;
+            }
+            document.getElementById('monitorBtn').disabled = false;
+            document.getElementById('stopMonitorBtn').disabled = true;
+        }
+
+        // Test with FFmpeg
+        function testWithFFmpeg() {
+            if (!currentStreamKey) {
+                showResult('ffmpegResult', '❌ No stream key available', 'error');
+                return;
+            }
+
+            const command = `ffmpeg -f lavfi -i testsrc2=size=640x480:rate=30 -f lavfi -i sine=frequency=1000:duration=10 -c:v libx264 -preset ultrafast -c:a aac -f flv ${currentRtmpUrl}${currentStreamKey}`;
+            
+            document.getElementById('ffmpegCommand').innerHTML = `
+                <strong>FFmpeg Command:</strong><br>
+                <code style="display: block; background: #333; padding: 10px; margin: 10px 0; word-break: break-all;">${command}</code>
+                <p>Run this command in your terminal to test the stream.</p>
+            `;
+            document.getElementById('ffmpegCommand').style.display = 'block';
+            
+            showResult('ffmpegResult', `✅ FFmpeg command generated for testing`, 'success');
+        }
+
+        // Show debug information
+        function showDebugInfo() {
+            const debugInfo = {
+                timestamp: new Date().toISOString(),
+                nostrEvent: nostrEvent,
+                streamKey: currentStreamKey,
+                rtmpUrl: currentRtmpUrl,
+                userAgent: navigator.userAgent,
+                websocketSupport: typeof WebSocket !== 'undefined',
+                fetchSupport: typeof fetch !== 'undefined'
+            };
+
+            showResult('debugInfo', `Debug Information:
+${JSON.stringify(debugInfo, null, 2)}`, 'info');
+        }
+
+        // Utility functions
+        function showResult(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `result ${type}-result`;
+            element.style.display = 'block';
+        }
+
+        function copyToClipboard(elementId) {
+            const element = document.getElementById(elementId);
+            navigator.clipboard.writeText(element.textContent).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+
+        // Simplified crypto functions for demo
+        async function generatePrivateKey() {
+            const array = new Uint8Array(32);
+            crypto.getRandomValues(array);
+            return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function getPublicKey(privateKey) {
+            // Simplified - in real implementation, use proper secp256k1
+            return 'npub1' + privateKey.substring(0, 32);
+        }
+
+        async function hashEvent(event) {
+            // Simplified - in real implementation, use proper SHA256
+            return 'event_' + Date.now().toString(36);
+        }
+
+        async function signEvent(event, privateKey) {
+            // Simplified - in real implementation, use proper secp256k1 signing
+            return 'sig_' + privateKey.substring(0, 16);
+        }
+
+        // Initialize
+        window.onload = function() {
+            checkRtmpServer();
+            checkDataBackend();
+        };
+    </script>
+</body>
+</html>

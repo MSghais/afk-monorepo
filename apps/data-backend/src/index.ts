@@ -2,10 +2,12 @@
 import Fastify from 'fastify';
 import fastifyCors from '@fastify/cors';
 import fastifyIO from 'fastify-socket.io';
+import fastifyWebSocket from '@fastify/websocket';
 import { Server as SocketIOServer } from 'socket.io';
 import path from 'path';
 import { config } from './config';
 import { setupWebSocket } from './services/livestream/socket';
+import { setupWebSocketHandler } from './websocketHandler';
 import { registerLivestreamRoutes } from './services/livestream/fastifyRoutes';
 import authPlugin from './plugins/auth';
 import jwt from 'jsonwebtoken';
@@ -47,7 +49,12 @@ async function buildServer() {
       methods: ['GET', 'POST', 'PUT', 'DELETE'],
       credentials: true,
     },
+    transports: ['websocket', 'polling'],
+    allowEIO3: true,
   });
+
+  // WebSocket setup for RTMP server communication
+  await fastify.register(fastifyWebSocket);
 
   // Register core plugins
   await fastify.register(prismaPlugin);
@@ -114,6 +121,85 @@ async function buildServer() {
   // Health check
   fastify.get('/health', async () => {
     return { status: 'ok' };
+  });
+
+  // WebSocket endpoint for RTMP server communication
+  fastify.register(async function (fastify) {
+    fastify.get('/ws', { websocket: true }, (connection, req) => {
+      console.log('🔌 RTMP server connected to WebSocket');
+      
+      // Set up ping/pong to keep connection alive
+      const pingInterval = setInterval(() => {
+        if (connection.readyState === 1) { // WebSocket.OPEN
+          try {
+            connection.ping();
+          } catch (error) {
+            console.error('❌ Error sending ping:', error);
+            clearInterval(pingInterval);
+          }
+        } else {
+          clearInterval(pingInterval);
+        }
+      }, 30000); // Ping every 30 seconds
+      
+      connection.on('message', (message) => {
+        try {
+          const data = JSON.parse(message.toString());
+          console.log('📡 Received message from RTMP server:', data);
+          
+          // Handle different message types from RTMP server
+          switch (data.type) {
+            case 'stream-started':
+              console.log('🎬 Stream started:', data.streamKey);
+              // Broadcast to Socket.IO clients
+              fastify.io.to(data.streamKey).emit('stream-started', data);
+              break;
+            case 'stream-ended':
+              console.log('🛑 Stream ended:', data.streamKey);
+              // Broadcast to Socket.IO clients
+              fastify.io.to(data.streamKey).emit('stream-ended', data);
+              break;
+            case 'stream-key-registered':
+              console.log('🔑 Stream key registered:', data.streamKey);
+              // Broadcast to Socket.IO clients
+              fastify.io.to(data.streamKey).emit('stream-key-registered', data);
+              break;
+            case 'pong':
+              console.log('🏓 Received pong from RTMP server');
+              break;
+            default:
+              console.log('📡 Unknown message type:', data.type);
+          }
+        } catch (error) {
+          console.error('❌ Error parsing WebSocket message:', error);
+        }
+      });
+
+      connection.on('close', (code, reason) => {
+        console.log('❌ RTMP server disconnected from WebSocket:', code, reason?.toString());
+        clearInterval(pingInterval);
+      });
+
+      connection.on('error', (error) => {
+        console.error('❌ WebSocket error:', error);
+        clearInterval(pingInterval);
+      });
+
+      connection.on('pong', () => {
+        console.log('🏓 Received pong from RTMP server');
+      });
+
+      // Send welcome message
+      try {
+        connection.send(JSON.stringify({
+          type: 'connected',
+          message: 'WebSocket connection established',
+          timestamp: new Date().toISOString()
+        }));
+      } catch (error) {
+        console.error('❌ Error sending welcome message:', error);
+      }
+    });
   });
 
   // Initialize WebSocket handlers

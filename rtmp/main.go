@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -81,6 +82,9 @@ func connectToDataBackend() {
 		go func() {
 			defer conn.Close()
 			for {
+				// Reset read deadline for each message
+				conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+
 				_, message, err := conn.ReadMessage()
 				if err != nil {
 					fmt.Printf("WebSocket read error: %v\n", err)
@@ -97,10 +101,37 @@ func connectToDataBackend() {
 			}
 		}()
 
-		// Keep connection alive
+		// Keep connection alive with ping/pong
 		conn.SetPingHandler(func(string) error {
+			fmt.Println("🏓 Received ping from data-backend")
 			return conn.WriteMessage(websocket.PongMessage, nil)
 		})
+
+		conn.SetPongHandler(func(string) error {
+			fmt.Println("🏓 Received pong from data-backend")
+			return nil
+		})
+
+		// Set read deadline to detect disconnections
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+
+		// Send periodic pings to keep connection alive (less frequent)
+		go func() {
+			ticker := time.NewTicker(60 * time.Second) // Reduced frequency
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if conn != nil {
+						if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+							fmt.Printf("❌ Error sending ping: %v\n", err)
+							return
+						}
+						fmt.Println("🏓 Sent ping to data-backend")
+					}
+				}
+			}
+		}()
 
 		// Wait for connection to close
 		conn.Close()
@@ -343,44 +374,59 @@ func writeAMF0Command(w io.Writer, csid uint8, msgStreamID uint32, values ...amf
 
 // ---------- RTMP Handshake ----------
 func handshake(conn net.Conn) error {
-	// C0
+	// C0: Version
 	c0 := make([]byte, 1)
 	if _, err := io.ReadFull(conn, c0); err != nil {
-		return err
+		return fmt.Errorf("failed to read C0: %v", err)
 	}
 	if c0[0] != 0x03 {
 		return fmt.Errorf("unsupported RTMP version: %d", c0[0])
 	}
-	// C1
+
+	// C1: Client handshake
 	c1 := make([]byte, 1536)
 	if _, err := io.ReadFull(conn, c1); err != nil {
-		return err
+		return fmt.Errorf("failed to read C1: %v", err)
 	}
-	// S0
+
+	// S0: Version response
 	if _, err := conn.Write([]byte{0x03}); err != nil {
-		return err
+		return fmt.Errorf("failed to write S0: %v", err)
 	}
-	// S1
+
+	// S1: Server handshake
 	s1 := make([]byte, 1536)
 	now := uint32(time.Now().Unix())
-	binary.BigEndian.PutUint32(s1[0:4], now)
-	// s1[4:8] = zero
-	rand.Read(s1[8:])
+	binary.BigEndian.PutUint32(s1[0:4], now) // timestamp
+	binary.BigEndian.PutUint32(s1[4:8], 0)   // zero
+	rand.Read(s1[8:])                        // random data
 	if _, err := conn.Write(s1); err != nil {
-		return err
+		return fmt.Errorf("failed to write S1: %v", err)
 	}
-	// S2: echo c1
+
+	// S2: Echo C1 back to client
 	s2 := make([]byte, 1536)
-	copy(s2[0:4], c1[0:4])
-	copy(s2[4:8], s1[0:4])
-	copy(s2[8:], c1[8:])
+	copy(s2, c1) // Echo the entire C1 back
 	if _, err := conn.Write(s2); err != nil {
-		return err
+		return fmt.Errorf("failed to write S2: %v", err)
 	}
-	// C2
+
+	// C2: Client should echo S1 back
 	c2 := make([]byte, 1536)
-	_, err := io.ReadFull(conn, c2)
-	return err
+	if _, err := io.ReadFull(conn, c2); err != nil {
+		return fmt.Errorf("failed to read C2: %v", err)
+	}
+
+	// Verify C2 matches S1 (client should echo our S1)
+	if !bytes.Equal(c2, s1) {
+		fmt.Printf("⚠️ C2 verification failed - client signature does not match!\n")
+		fmt.Printf("Expected S1: %x...\n", s1[:16])
+		fmt.Printf("Received C2: %x...\n", c2[:16])
+		// Don't return error - some clients don't implement this correctly
+		// but still work fine
+	}
+
+	return nil
 }
 
 // ---------- Inbound message reassembly (fmt0 + fmt1 + fmt2 + fmt3 continuations, with ext TS) ----------
@@ -617,7 +663,22 @@ func readMsg(conn net.Conn) (rtmpMsg, error) {
 	case 1: // fmt1: timestamp delta + length + type
 		state, exists = chunkStates[csid]
 		if !exists {
-			return msg, fmt.Errorf("fmt1 without previous state for csid %d", csid)
+			// Create a default state for this CSID if it doesn't exist
+			// This handles cases where clients send fmt1 before fmt0
+			state = &chunkState{
+				csid:        csid,
+				msgType:     0,
+				msgStreamID: 0,
+				timestamp:   0,
+				msgLen:      0,
+				got:         0,
+				payload:     make([]byte, 0),
+			}
+			chunkStates[csid] = state
+			// Only log for important CSIDs to reduce spam
+			if csid < 10 || csid == 44 {
+				fmt.Printf("🔧 Created default state for CSID %d (fmt1 without previous state)\n", csid)
+			}
 		}
 
 		mh := make([]byte, 7)
@@ -646,7 +707,21 @@ func readMsg(conn net.Conn) (rtmpMsg, error) {
 	case 2: // fmt2: timestamp delta only
 		state, exists = chunkStates[csid]
 		if !exists {
-			return msg, fmt.Errorf("fmt2 without previous state for csid %d", csid)
+			// Create a default state for this CSID if it doesn't exist
+			state = &chunkState{
+				csid:        csid,
+				msgType:     0,
+				msgStreamID: 0,
+				timestamp:   0,
+				msgLen:      0,
+				got:         0,
+				payload:     make([]byte, 0),
+			}
+			chunkStates[csid] = state
+			// Only log for important CSIDs to reduce spam
+			if csid < 10 || csid == 44 {
+				fmt.Printf("🔧 Created default state for CSID %d (fmt2 without previous state)\n", csid)
+			}
 		}
 
 		mh := make([]byte, 3)
@@ -671,7 +746,21 @@ func readMsg(conn net.Conn) (rtmpMsg, error) {
 	case 3: // fmt3: no message header
 		state, exists = chunkStates[csid]
 		if !exists {
-			return msg, fmt.Errorf("fmt3 without previous state for csid %d", csid)
+			// Create a default state for this CSID if it doesn't exist
+			state = &chunkState{
+				csid:        csid,
+				msgType:     0,
+				msgStreamID: 0,
+				timestamp:   0,
+				msgLen:      0,
+				got:         0,
+				payload:     make([]byte, 0),
+			}
+			chunkStates[csid] = state
+			// Only log for important CSIDs to reduce spam
+			if csid < 10 || csid == 44 {
+				fmt.Printf("🔧 Created default state for CSID %d (fmt3 without previous state)\n", csid)
+			}
 		}
 		// No changes to state
 
@@ -717,11 +806,18 @@ func minU32(a, b uint32) uint32 {
 func handleConn(conn net.Conn) {
 	defer conn.Close()
 	fmt.Printf("> client %s\n", conn.RemoteAddr())
+
+	// Set connection timeout
+	conn.SetDeadline(time.Now().Add(30 * time.Second))
+
 	if err := handshake(conn); err != nil {
-		fmt.Println("handshake error:", err)
+		fmt.Printf("❌ Handshake error: %v\n", err)
 		return
 	}
-	fmt.Println("handshake ok")
+	fmt.Println("✅ Handshake completed successfully")
+
+	// Reset deadline after handshake
+	conn.SetDeadline(time.Time{})
 
 	// Control: Window Acknowledgement Size (type 5)
 	was := make([]byte, 4)
@@ -768,7 +864,8 @@ func handleConn(conn net.Conn) {
 
 		// Handle other message types
 		fmt.Printf("⚠️ Unexpected message type: %d, payload length: %d\n", msg.msgType, len(msg.payload))
-		continue
+		// Don't continue - break to process the message
+		break
 	}
 
 	cmd, n0, ok := amf0ReadValue(msg.payload)

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Connection Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: #fff; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #333; border-radius: 8px; background: #2a2a2a; }
+        button { padding: 12px 20px; margin: 8px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin: 10px 0; padding: 15px; border-radius: 5px; font-family: monospace; }
+        .success { background: #1e3a1e; border: 1px solid #28a745; }
+        .error { background: #3a1e1e; border: 1px solid #dc3545; }
+        .info { background: #1e3a3a; border: 1px solid #17a2b8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔌 WebSocket Connection Test</h1>
+        
+        <div class="section">
+            <h3>Test WebSocket Connection</h3>
+            <button onclick="testWebSocket()">Test WebSocket Connection</button>
+            <button onclick="testSocketIO()">Test Socket.IO Connection</button>
+            <div id="result" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <h3>Connection Status</h3>
+            <div id="status">Not connected</div>
+        </div>
+
+        <div class="section">
+            <h3>Messages</h3>
+            <div id="messages"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let socketIO = null;
+
+        function showResult(message, type = 'info') {
+            const result = document.getElementById('result');
+            result.textContent = message;
+            result.className = `result ${type}`;
+            result.style.display = 'block';
+        }
+
+        function addMessage(message, type = 'info') {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function updateStatus(status) {
+            document.getElementById('status').textContent = status;
+        }
+
+        function testWebSocket() {
+            addMessage('Testing raw WebSocket connection...', 'info');
+            
+            try {
+                ws = new WebSocket('ws://localhost:5050/ws');
+                
+                ws.onopen = function(event) {
+                    addMessage('✅ WebSocket connected!', 'success');
+                    updateStatus('Connected (WebSocket)');
+                    
+                    // Send test message
+                    ws.send(JSON.stringify({
+                        type: 'test',
+                        message: 'Hello from WebSocket test',
+                        timestamp: new Date().toISOString()
+                    }));
+                };
+                
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        addMessage(`📨 Received: ${JSON.stringify(data, null, 2)}`, 'info');
+                    } catch (e) {
+                        addMessage(`📨 Received: ${event.data}`, 'info');
+                    }
+                };
+                
+                ws.onclose = function(event) {
+                    addMessage(`❌ WebSocket closed: ${event.code} - ${event.reason}`, 'error');
+                    updateStatus('Disconnected');
+                };
+                
+                ws.onerror = function(error) {
+                    addMessage(`❌ WebSocket error: ${error}`, 'error');
+                    updateStatus('Error');
+                };
+                
+            } catch (error) {
+                addMessage(`❌ Failed to create WebSocket: ${error.message}`, 'error');
+            }
+        }
+
+        function testSocketIO() {
+            addMessage('Testing Socket.IO connection...', 'info');
+            
+            // Load Socket.IO client
+            const script = document.createElement('script');
+            script.src = 'https://cdn.socket.io/4.8.1/socket.io.min.js';
+            script.onload = function() {
+                try {
+                    socketIO = io('http://localhost:5050', {
+                        transports: ['websocket', 'polling']
+                    });
+                    
+                    socketIO.on('connect', function() {
+                        addMessage('✅ Socket.IO connected!', 'success');
+                        updateStatus('Connected (Socket.IO)');
+                    });
+                    
+                    socketIO.on('disconnect', function() {
+                        addMessage('❌ Socket.IO disconnected', 'error');
+                        updateStatus('Disconnected');
+                    });
+                    
+                    socketIO.on('connect_error', function(error) {
+                        addMessage(`❌ Socket.IO connection error: ${error.message}`, 'error');
+                        updateStatus('Error');
+                    });
+                    
+                    // Listen for stream events
+                    socketIO.on('stream-started', function(data) {
+                        addMessage(`🎬 Stream started: ${JSON.stringify(data)}`, 'success');
+                    });
+                    
+                    socketIO.on('stream-ended', function(data) {
+                        addMessage(`🛑 Stream ended: ${JSON.stringify(data)}`, 'info');
+                    });
+                    
+                    socketIO.on('stream-key-registered', function(data) {
+                        addMessage(`🔑 Stream key registered: ${JSON.stringify(data)}`, 'success');
+                    });
+                    
+                } catch (error) {
+                    addMessage(`❌ Failed to create Socket.IO connection: ${error.message}`, 'error');
+                }
+            };
+            document.head.appendChild(script);
+        }
+
+        // Test both connections on page load
+        window.onload = function() {
+            addMessage('Page loaded. Ready to test connections.', 'info');
+        };
+    </script>
+</body>
+</html>

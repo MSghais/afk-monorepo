@@ -96,6 +96,10 @@ export const LivestreamMain: React.FC<LivestreamMainProps> = ({
   const [streamStartRetries, setStreamStartRetries] = useState(0);
 
   const { showModal, showToast } = useUIStore();
+  const { data: eventData } = useGetSingleEvent({
+    eventId: currentStreamId || '',
+  });
+  console.log('eventData', eventData);
   const { data: event, isLoading: eventLoading, isError: eventError } = useGetSingleEvent({
     eventId: currentStreamId || '',
   });

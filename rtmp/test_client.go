@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 package main
 
 import (
@@ -10,6 +13,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+// Test client for RTMP server Nostr authentication
 func main() {
 	// Generate a test keypair
 	sk := nostr.GeneratePrivateKey()
@@ -85,20 +89,4 @@ func main() {
 	} else {
 		fmt.Printf("\n❌ Authentication failed: %s\n", authResp.Error)
 	}
-}
-
-type NostrAuthRequest struct {
-	ID        string     `json:"id"`
-	PubKey    string     `json:"pubkey"`
-	CreatedAt int64      `json:"created_at"`
-	Kind      int        `json:"kind"`
-	Tags      [][]string `json:"tags"`
-	Content   string     `json:"content"`
-	Sig       string     `json:"sig"`
-}
-
-type NostrAuthResponse struct {
-	Success   bool   `json:"success"`
-	StreamKey string `json:"stream_key,omitempty"`
-	Error     string `json:"error,omitempty"`
 }
