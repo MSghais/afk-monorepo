@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -63,6 +64,9 @@ var streamKeyToPubkey = make(map[string]string) // stream_key -> pubkey
 var dataBackendConn *websocket.Conn
 var dataBackendUrl = "ws://localhost:5050/ws"
 
+// Serialize websocket writes to avoid concurrent writer issues
+var _wsWriteMu sync.Mutex
+
 // Connect to data-backend WebSocket
 func connectToDataBackend() {
 	for {
@@ -82,8 +86,8 @@ func connectToDataBackend() {
 		go func() {
 			defer conn.Close()
 			for {
-				// Reset read deadline for each message
-				conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+				// Extend read deadline to allow server pings to keep alive
+				conn.SetReadDeadline(time.Now().Add(70 * time.Second))
 
 				_, message, err := conn.ReadMessage()
 				if err != nil {
@@ -101,37 +105,27 @@ func connectToDataBackend() {
 			}
 		}()
 
-		// Keep connection alive with ping/pong
-		conn.SetPingHandler(func(string) error {
-			fmt.Println("🏓 Received ping from data-backend")
-			return conn.WriteMessage(websocket.PongMessage, nil)
-		})
-
-		conn.SetPongHandler(func(string) error {
-			fmt.Println("🏓 Received pong from data-backend")
+		// Reply to server pings with Pong and extend deadline
+		conn.SetPingHandler(func(appData string) error {
+			_wsWriteMu.Lock()
+			defer _wsWriteMu.Unlock()
+			deadline := time.Now().Add(5 * time.Second)
+			if err := conn.WriteControl(websocket.PongMessage, []byte(appData), deadline); err != nil {
+				fmt.Printf("❌ Error replying Pong: %v\n", err)
+				return err
+			}
+			conn.SetReadDeadline(time.Now().Add(70 * time.Second))
 			return nil
 		})
 
-		// Set read deadline to detect disconnections
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		// On Pong, extend read deadline
+		conn.SetPongHandler(func(string) error {
+			conn.SetReadDeadline(time.Now().Add(70 * time.Second))
+			return nil
+		})
 
-		// Send periodic pings to keep connection alive (less frequent)
-		go func() {
-			ticker := time.NewTicker(60 * time.Second) // Reduced frequency
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					if conn != nil {
-						if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-							fmt.Printf("❌ Error sending ping: %v\n", err)
-							return
-						}
-						fmt.Println("🏓 Sent ping to data-backend")
-					}
-				}
-			}
-		}()
+		// Initial read deadline
+		conn.SetReadDeadline(time.Now().Add(70 * time.Second))
 
 		// Wait for connection to close
 		conn.Close()
@@ -175,6 +169,8 @@ func sendToDataBackend(msg map[string]interface{}) {
 		return
 	}
 
+	_wsWriteMu.Lock()
+	defer _wsWriteMu.Unlock()
 	if err := dataBackendConn.WriteJSON(msg); err != nil {
 		fmt.Printf("Failed to send message to data-backend: %v\n", err)
 	}
@@ -850,9 +846,31 @@ func handleConn(conn net.Conn) {
 			return
 		}
 
-		// Handle set chunk size (msgType 1) and other control messages
-		if msg.msgType == 1 {
-			fmt.Println("📏 Received set chunk size message")
+		// Skip partial/placeholder messages (readMsg returns zero-valued msg when not complete)
+		if len(msg.payload) == 0 && msg.msgType == 0 && msg.msgStreamID == 0 && msg.csid == 0 {
+			continue
+		}
+
+		// Handle set chunk size (msgType 0 and 1) and other control messages
+		if msg.msgType == 0 || msg.msgType == 1 {
+			if msg.msgType == 0 {
+				fmt.Println("📏 Received set chunk size message (type 0)")
+			} else {
+				fmt.Println("📏 Received set chunk size message (type 1)")
+			}
+			// Handle chunk size message
+			if len(msg.payload) >= 4 {
+				chunkSize := binary.BigEndian.Uint32(msg.payload)
+				fmt.Printf("   Chunk size set to: %d bytes\n", chunkSize)
+			} else {
+				fmt.Println("   Empty chunk size message")
+			}
+			continue
+		}
+
+		// Handle other control messages that we can safely ignore
+		if msg.msgType >= 2 && msg.msgType <= 7 {
+			fmt.Printf("📋 Received control message type %d, payload length: %d\n", msg.msgType, len(msg.payload))
 			continue
 		}
 
@@ -866,6 +884,12 @@ func handleConn(conn net.Conn) {
 		fmt.Printf("⚠️ Unexpected message type: %d, payload length: %d\n", msg.msgType, len(msg.payload))
 		// Don't continue - break to process the message
 		break
+	}
+
+	// Only parse AMF0 if we have a valid message with payload
+	if len(msg.payload) == 0 {
+		fmt.Println("⚠️ Received message with empty payload, skipping AMF0 parsing")
+		return
 	}
 
 	cmd, n0, ok := amf0ReadValue(msg.payload)
@@ -930,6 +954,27 @@ func handleConn(conn net.Conn) {
 			tid, _ := txnV.(float64)
 			fmt.Printf("cmd: %s (txn=%.0f)\n", name, tid)
 			switch name {
+			case "releaseStream":
+				// Respond with _result to acknowledge releaseStream
+				if err := writeAMF0Command(conn, defaultOutCsidCmd, 0,
+					"_result", tid, nil, nil,
+				); err != nil {
+					fmt.Println("write releaseStream _result err:", err)
+					return
+				}
+			case "FCPublish":
+				// Respond with onFCPublish to acknowledge FCPublish
+				if err := writeAMF0Command(conn, defaultOutCsidCmd, streamID,
+					"onFCPublish", tid, nil,
+					[][2]amf0Val{
+						{"level", "status"},
+						{"code", "NetStream.Publish.Start"},
+						{"description", "FCPublish ok."},
+					},
+				); err != nil {
+					fmt.Println("write onFCPublish err:", err)
+					return
+				}
 			case "createStream":
 				// _result, txn, null, streamID
 				if err := writeAMF0Command(conn, defaultOutCsidCmd, 0,
