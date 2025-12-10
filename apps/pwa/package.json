@@ -10,7 +10,7 @@
     "dev": "next dev",
     "start": "next start",
     "build:app": "pnpm run build:nostr_sdk && next build",
-    "build": "next build",
+    "build": "next build --webpack",
     "build:nostr_sdk": "cd ../.. && pnpm run build:nostr_sdk",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
